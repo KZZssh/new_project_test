@@ -6,9 +6,10 @@ from collections import defaultdict
 from google.oauth2.service_account import Credentials
 import json
 import requests
+from pathlib import Path
 
-DB_FILE = pathlib.Path("C:/Users/user/Desktop/neonna/TEST_BOT/my_project_telega/shop.db")
-SERVICE_ACCOUNT_FILE = "neonna/TEST_BOT/my_project_telega/credentials.json"
+DB_FILE = Path("shop.db")  # ✅ просто в корне проекта
+SERVICE_ACCOUNT_FILE = Path("credentials.json")
 SPREADSHEET_NAME = "UserData"
 SHEET_NAME = "отчет по товарам"
 

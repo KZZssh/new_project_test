@@ -31,13 +31,7 @@ from client_handlers import (
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
-import logging
-logger = logging.getLogger(__name__)
 
-async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    logger.debug(f"🔁 Обработчик admin_menu_callback: data={query.data}, user={update.effective_user.id}")
 
   
 
