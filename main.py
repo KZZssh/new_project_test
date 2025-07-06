@@ -2,6 +2,8 @@ import logging
 import os
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, MessageHandler, filters, ConversationHandler
 from configs import BOT_TOKEN
+from telegram import Update 
+from telegram.ext import ContextTypes
 
 # --- Импорт всех твоих обработчиков --- (оставлено без изменений)
 from admin_handlers import (
@@ -29,11 +31,20 @@ from client_handlers import (
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
+import logging
+logger = logging.getLogger(__name__)
+
+async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    logger.debug(f"🔁 Обработчик admin_menu_callback: data={query.data}, user={update.effective_user.id}")
+
+  
 
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
-
+    application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern="^admin_"))
     # Все  add_handler'ы без изменений:
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
