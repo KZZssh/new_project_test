@@ -886,8 +886,9 @@ async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TY
             kb = [[InlineKeyboardButton("История заказов 🗒" , callback_data="order_history")]]
             await context.bot.send_message(
                 chat_id=customer_user_id,
-                text=f"*{md2(f'✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные')}*",
-                parse_mode="MarkdownV2" , 
+                text="*" + md2(f"✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные") + "*",
+
+                parse_mode="MarkdownV2",
                 reply_markup=InlineKeyboardMarkup(kb)
             )
 
