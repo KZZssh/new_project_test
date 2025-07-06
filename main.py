@@ -3,6 +3,18 @@ from telegram.ext import Application ,  CommandHandler, CallbackQueryHandler , I
 from configs import BOT_TOKEN
 
 
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import os
+
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'Hello from my_project_telega!')
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8080))
+    HTTPServer(('0.0.0.0', port), SimpleHandler).serve_forever()
 
 # --- Импорт всех админских обработчиков из admin_handlers.py ---
 from admin_handlers import (

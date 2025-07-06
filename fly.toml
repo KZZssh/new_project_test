@@ -18,6 +18,3 @@ PORT = "8080"
   [[services.ports]]
     port = 443
     handlers = ["tls", "http"]
-
-[checks]
-  skip_machine_checks = true
