@@ -7,8 +7,8 @@ from google.oauth2.service_account import Credentials
 import json
 import requests
 
-DB_FILE = pathlib.Path("C:/Users/user/Desktop/neonna/new_tel/shop.db")
-SERVICE_ACCOUNT_FILE = "neonna/new_tel/credentials.json"
+DB_FILE = pathlib.Path("C:/Users/user/Desktop/neonna/TEST_BOT/my_project_telega/shop.db")
+SERVICE_ACCOUNT_FILE = "neonna/TEST_BOT/my_project_telega/credentials.json"
 SPREADSHEET_NAME = "UserData"
 SHEET_NAME = "отчет по товарам"
 
