@@ -757,7 +757,9 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE, edit=Tru
     else:
         
 
-        text = f"*{md2('🛒 Ваша корзина:\n\n')}*".replace('\n', '\\n')
+        text_raw = md2("🛒 Ваша корзина:\n\n").replace('\n', '\\n')
+        text = f"*{text_raw}*"
+
 
 
         total_price = 0
