@@ -9,7 +9,7 @@ from telegram.ext import (
     filters,
 )
 from telegram.constants import ParseMode
-
+import logging
 import asyncio
 import re
 import telegram.error
@@ -48,6 +48,10 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    logging.warning(f"FSM CANCELLED. Callback: {getattr(update.callback_query, 'data', None)}; Message: {getattr(update.message, 'text', None)}; State: {context.user_data.get('state')}")
+    
+
     context.user_data.clear()
     message = md2("Действие отменено.")
     if update.callback_query:
@@ -1871,98 +1875,136 @@ async def add_product_media_handler(update: Update, context: ContextTypes.DEFAUL
 
 
 
-# --- Редактирование товара ---
-edit_product_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_edit_product, pattern="^admin_edit_product$")],
-    states={
-        AWAIT_EDIT_ACTION: [CallbackQueryHandler(handle_edit_action)],
-        CONFIRM_DELETE_VARIANT: [CallbackQueryHandler(confirm_variant_delete, pattern="^confirm_delete_variant$|^cancel_delete$")],
-        CONFIRM_DELETE_FULL_PRODUCT: [CallbackQueryHandler(confirm_full_product_delete, pattern="^confirm_delete_full$|^cancel_delete$")],
-        SELECT_VARIANT_FIELD: [
-            CallbackQueryHandler(select_variant_field_to_edit, pattern="^edit_field_"),
-            CallbackQueryHandler(handle_edit_action),
+# === ConversationHandlers ===
 
+admin_menu_convhandler = ConversationHandler(
+    entry_points=[CommandHandler("admin", admin_menu_entry)],
+    states={
+        ADMIN_MENU_AWAIT: [
+            CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_"),
+        ],
+        ADMIN_EDIT_AWAIT_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_await_id),
+        ],
+        ADMIN_SUBCAT_AWAIT_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id),
+        ],
+    },
+    fallbacks=[
+        MessageHandler(filters.COMMAND, cancel_dialog),
+        CallbackQueryHandler(cancel_dialog, pattern="^cancel_dialog$")  # на всякий случай
+    ],
+    per_user=True,
+    per_chat=True,
+    per_message=True
+)
+
+edit_product_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(start_edit_product, pattern=r"^admin_edit_product$")],
+    states={
+        AWAIT_EDIT_ACTION: [
+            CallbackQueryHandler(handle_edit_action),
+        ],
+        CONFIRM_DELETE_VARIANT: [
+            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
+        ],
+        CONFIRM_DELETE_FULL_PRODUCT: [
+            CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
+        ],
+        SELECT_VARIANT_FIELD: [
+            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_"),
+            CallbackQueryHandler(handle_edit_action),  # fallback на всякий
         ],
         GET_NEW_VARIANT_VALUE: [
             MessageHandler(filters.TEXT | filters.PHOTO, get_new_variant_value),
             CallbackQueryHandler(handle_edit_action)
         ],
-        SELECT_VARIANT_SIZE: [CallbackQueryHandler(select_variant_size, pattern="^add_size_")],
-        GET_NEW_SIZE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name)],
-        SELECT_VARIANT_COLOR: [CallbackQueryHandler(select_variant_color, pattern="^add_color_")],
-        GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
-        GET_VARIANT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price)],
-        GET_VARIANT_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity)],
+        SELECT_VARIANT_SIZE: [
+            CallbackQueryHandler(select_variant_size, pattern=r"^add_size_"),
+        ],
+        GET_NEW_SIZE_NAME: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name),
+        ],
+        SELECT_VARIANT_COLOR: [
+            CallbackQueryHandler(select_variant_color, pattern=r"^add_color_"),
+        ],
+        GET_NEW_COLOR_NAME: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name),
+        ],
+        GET_VARIANT_PRICE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price),
+        ],
+        GET_VARIANT_QUANTITY: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity),
+        ],
         GET_VARIANT_PHOTO: [
             MessageHandler(filters.PHOTO | filters.VIDEO, add_media),
             MessageHandler(filters.COMMAND, finish_media)
         ],
-        ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")],
+        ASK_ADD_MORE_VARIANTS: [
+            CallbackQueryHandler(ask_add_more_variants, pattern=r"^add_more_variants$|^finish_add_product$"),
+        ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
-    per_user=True, per_chat=True , per_message=True
+    fallbacks=[
+        MessageHandler(filters.COMMAND, cancel_dialog),
+        CallbackQueryHandler(cancel_dialog, pattern=r"^cancel_dialog$")  # про запас
+    ],
+    per_user=True,
+    per_chat=True,
+    per_message=True
 )
 
-# --- Главное меню ---
-admin_menu_convhandler = ConversationHandler(
-    entry_points=[CommandHandler("admin", admin_menu_entry)],
+subcat_rename_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(start_rename_subcat, pattern=r"^subcat_rename_\d+$")],
     states={
-        ADMIN_MENU_AWAIT: [CallbackQueryHandler(admin_menu_callback, pattern="^admin_")],
-        ADMIN_EDIT_AWAIT_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_await_id)],
-        ADMIN_SUBCAT_AWAIT_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id)],
-        
-        
-
+        RENAME_SUBCAT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_subcat),
+        ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
-    per_user=True, per_chat=True , per_message=True
+    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_subcat)],
+    per_user=True,
+    per_chat=True,
+    per_message=True
 )
 
+brand_rename_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(start_rename_brand, pattern=r"^brand_rename_\d+$")],
+    states={
+        RENAME_BRAND: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_brand),
+        ],
+    },
+    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_brand)],
+    per_user=True,
+    per_chat=True,
+    per_message=True
+)
 
+# === Одиночные CallbackHandlers ===
 
-
-
-# --- Управление категориями ---
 cat_manage_handler = CallbackQueryHandler(
     handle_cat_manage,
     pattern=r"^cat_delete_\d+$|^cat_delete_confirm_\d+$|^cat_delete_cancel$"
 )
-cat_rename_text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, category_rename_text)
 
-# --- Управление подкатегориями ---
 subcat_manage_handler = CallbackQueryHandler(
     handle_subcat_manage,
     pattern=r"^subcat_(delete|manage)_\d+$|^subcat_delete_confirm_\d+$|^subcat_delete_cancel$"
 )
 
-
-subcat_rename_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_rename_subcat, pattern=r"^subcat_rename_\d+$")],
-    states={
-        RENAME_SUBCAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_subcat)],
-    },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_subcat)],
-    per_user=True, per_chat=True
-)
-
-# --- Управление брендами ---
 brand_manage_handler = CallbackQueryHandler(
     handle_brand_manage,
     pattern=r"^brand_(delete|manage)_\d+$|^brand_delete_confirm_\d+$|^brand_delete_cancel$"
 )
-brand_rename_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_rename_brand, pattern="^brand_rename_\\d+$")],
-    states={
-        RENAME_BRAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_brand)],
-    },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_brand)],
-    per_user=True, per_chat=True
-)
 
-# --- Отчёты и подтверждение заказов ---
-report_handler = CallbackQueryHandler(report_combined, pattern="^admin_report$")
-orders_report_handler = CallbackQueryHandler(ask_orders_report_period, pattern="^admin_orders_report$")
-orders_report_period_handler = CallbackQueryHandler(handle_orders_report_period, pattern="^orders_report_(today|3days|7days|30days)$")
-admin_decision_handler = CallbackQueryHandler(handle_admin_decision, pattern="^admin_(confirm|reject)_\d+$")
-nazad_to_admin_menu_handler = CallbackQueryHandler(nazad_to_admin_menu, pattern="^admin_menu$") 
+cat_rename_text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, category_rename_text)
+
+# === Админские действия ===
+
+report_handler = CallbackQueryHandler(report_combined, pattern=r"^admin_report$")
+orders_report_handler = CallbackQueryHandler(ask_orders_report_period, pattern=r"^admin_orders_report$")
+orders_report_period_handler = CallbackQueryHandler(handle_orders_report_period, pattern=r"^orders_report_(today|3days|7days|30days)$")
+admin_decision_handler = CallbackQueryHandler(handle_admin_decision, pattern=r"^admin_(confirm|reject)_\d+$")
+nazad_to_admin_menu_handler = CallbackQueryHandler(nazad_to_admin_menu, pattern=r"^admin_menu$")
+
 
