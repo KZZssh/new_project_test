@@ -1160,9 +1160,7 @@ async def order_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     await asyncio.sleep(0.5)
 
-    if not context.user_data.get("order_history_started"):
-        await query.edit_message_text("Сначала откройте историю заказов.", parse_mode=ParseMode.HTML)
-        return
+    
 
     filter_type = query.data.replace("order_filter_", "")
     context.user_data["order_filter"] = filter_type
