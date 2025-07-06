@@ -15,6 +15,7 @@ from db import fetchall, fetchone, execute
 from datetime import datetime
 import time
 ASK_NAME, ASK_ADDRESS, ASK_PHONE = range(3)
+import telegram.error
 
 def md2(text):
     """
@@ -744,61 +745,74 @@ async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_
         cart[variant_id_str] = {'name': full_name, 'price': variant['price'], 'quantity': 1}
     return True
 
-async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE, edit=True):
-    cart = context.user_data.get('cart', {})
+
+
+async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=True):
+    cart = context.user_data.setdefault('cart', {})
     chat_id = update.effective_chat.id
+
     if update.callback_query:
         await update.callback_query.answer()
 
-    kb = [[InlineKeyboardButton("◀ Назад" , callback_data="back_to_main_menu")]]
+    kb_back = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")]]
+    
     if not cart:
-        text = ("🛒 Ваша корзина пуста.")
-        reply_markup = InlineKeyboardMarkup(kb)
+        text = "🛒 Ваша корзина пуста."
+        reply_markup = InlineKeyboardMarkup(kb_back)
     else:
-        
-
-        text_raw = ("🛒 Ваша корзина:\n\n")
+        text_raw = "🛒 Ваша корзина:\n\n"
         text = f"<b>{text_raw}</b>"
-
-
 
         total_price = 0
         keyboard = []
+
         for variant_id_str, item in cart.items():
             item_total = item['price'] * item['quantity']
             total_price += item_total
+
             text += f"• <b>{item['name']}</b> (x{item['quantity']}) - <b>{item_total}₸</b>\n"
+
             keyboard.append([
-                InlineKeyboardButton(md2("➖"), callback_data=f"cart_minus_{variant_id_str}"),
-                InlineKeyboardButton(md2(str(item['quantity'])), callback_data="noop"),
-                InlineKeyboardButton(md2("➕"), callback_data=f"cart_plus_{variant_id_str}")
+                InlineKeyboardButton("➖", callback_data=f"cart_minus_{variant_id_str}"),
+                InlineKeyboardButton(str(item['quantity']), callback_data="noop"),
+                InlineKeyboardButton("➕", callback_data=f"cart_plus_{variant_id_str}")
             ])
-        text += f"\n<b>{md2('Итого')}:</b>  <b>{total_price}</b>₸"
+
+        text += f"\n<b>Итого:</b> <b>{total_price}₸</b>"
         keyboard.append([InlineKeyboardButton("🧾 Оформить заказ", callback_data="by_all")])
         keyboard.append([InlineKeyboardButton("🗑️ Очистить корзину", callback_data="clear_cart")])
         keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if update.callback_query and edit:
-        try:
+
+    try:
+        if update.callback_query:
             await update.callback_query.edit_message_text(
-                text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
             )
-        except Exception:
-            await context.bot.send_message(
-                chat_id=chat_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
-            )
-     
-    else:
-        if update.message:
+        elif update.message:
             await update.message.reply_text(
-                text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
             )
-           
         else:
             await context.bot.send_message(
-                chat_id=chat_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+                chat_id=chat_id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
             )
+    except telegram.error.BadRequest:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=reply_markup
+        )
+
+
             
         
 
@@ -808,37 +822,64 @@ async def reply_cart_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    context.user_data.pop('cart', None)
-    await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена.") , context)
+    context.user_data['cart'] = {}  # безопаснее, чем pop()
+    await safe_edit_or_send(query, "🛒 Ваша корзина очищена.", context)
+
 
 async def cart_plus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
     variant_id = query.data.split('_')[2]
-    cart = context.user_data.get('cart', {})
+    cart = context.user_data.setdefault('cart', {})
     item = cart.get(variant_id)
+    
     if not item:
-        await query.answer(md2("Товар не найден в корзине."), show_alert=True)
+        await query.answer("❌ Товар не найден в корзине.", show_alert=True)
         return
 
-    variant = await fetchone("SELECT quantity FROM product_variants WHERE id = ?", (variant_id,))
-    if not variant or item['quantity'] >= variant['quantity']:
-        await query.answer(md2("Больше нет в наличии!"), show_alert=True)
+    try:
+        variant = await fetchone("SELECT quantity FROM product_variants WHERE id = ?", (variant_id,))
+    except Exception as e:
+        await query.answer("⚠️ Ошибка при проверке наличия.", show_alert=True)
+        return
+
+    if not variant:
+        await query.answer("❌ Товар больше недоступен.", show_alert=True)
+        return
+
+    if item['quantity'] >= variant['quantity']:
+        await query.answer("📦 Больше нет в наличии!", show_alert=True)
         return
 
     item['quantity'] += 1
-    await show_cart(update, context)
+
+    try:
+        await show_cart(update, context , edit= True)
+    except Exception as e:
+        print("⚠️ Ошибка при отображении корзины после +:", e)
+
 
 async def cart_minus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     variant_id = query.data.split('_')[2]
     cart = context.user_data.setdefault('cart', {})
-    if variant_id in cart:
-        cart[variant_id]['quantity'] -= 1
-        if cart[variant_id]['quantity'] <= 0:
-            del cart[variant_id]
-    await show_cart(update, context, edit=True)
+
+    if variant_id not in cart:
+        await query.answer("❌ Товар не найден.", show_alert=True)
+        return
+
+    cart[variant_id]['quantity'] -= 1
+
+    if cart[variant_id]['quantity'] <= 0:
+        del cart[variant_id]
+
+    try:
+        await show_cart(update, context, edit=True)
+    except Exception as e:
+        print("⚠️ Ошибка при отображении корзины после -:", e)
 
 async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
