@@ -1,1 +1,6 @@
+__pycache__/
+*.pyc
+*.db
+credentials.json
+.env
 
