@@ -78,8 +78,8 @@ async def create_new_entity(update, context, table_name, name, **kwargs):
 # --- Добавление товара ---
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("Нет доступа."), parse_mode=ParseMode.HTML
-        return 
+        await update.message.reply_text("Нет доступа.", parse_mode=ParseMode.HTML)
+        return
     context.user_data.clear()
     context.user_data["state"] = "get_product_name"
     query = update.callback_query
