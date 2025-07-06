@@ -662,12 +662,12 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     product = await fetchone("SELECT name FROM products WHERE id = ?", (product_id,))
     text = (
-        f"{md2(product['name'])}\n"
-        f"{md2('Цвет')}: {md2(variant['color'])}\n"
-        f"{md2('Размер')}: {md2(variant['size'])}\n"
-        f"{md2('Цена')}: {md2(variant['price'])}₸\n"
-        f"{md2('Осталось')}: {md2(variant['quantity'])} {md2('шт.')}\n\n"
-        f"{md2('Добавить этот вариант в корзину?')}"
+        f"<b>{product['name']}</b>\n"
+        f"<b>Цвет</b>: {variant['color']}\n"
+        f"<b>Размер</b>: {variant['size']}\n"
+        f"<b>Цена</b>: {variant['price']}₸\n"
+        f"Осталось: {variant['quantity']} шт.\n\n"
+        f"Добавить этот вариант в корзину?"
     )
     keyboard = [
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
@@ -675,7 +675,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(md2("⏪ К товарам "), callback_data="back_to_slider")] ,
         [InlineKeyboardButton(md2("⏮ Главная меню ") , callback_data="back_to_main_menu")]
     ]
-    await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2", context=context)
+    await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
 
 async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -685,7 +685,7 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     brand_id = context.user_data.get('current_brand_id')
     all_mode = context.user_data.get('all_mode', False)
 
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(1)
 
     if all_mode:
         # если пользователь был в режиме "все товары", всегда возвращаем туда
@@ -721,21 +721,21 @@ async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_
         WHERE pv.id = ?
     """, (product_variant_id,))
     if not variant or variant['quantity'] <= 0:
-        msg = md2("❌ Этот вариант товара закончился на складе.")
+        msg = ("❌ Этот вариант товара закончился на складе.")
         if query:
             await query.answer(msg, show_alert=True)
         else:
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="MarkdownV2")
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
         return False
     cart = context.user_data.setdefault('cart', {})
     variant_id_str = str(product_variant_id)
     current_quantity = cart.get(variant_id_str, {}).get('quantity', 0)
     if current_quantity >= variant['quantity']:
-        msg = md2("Вы уже добавили в корзину всё, что есть в наличии!")
+        msg = ("Вы уже добавили в корзину всё, что есть в наличии!")
         if query:
             await query.answer(msg, show_alert=True)
         else:
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="MarkdownV2")
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
         return False
     full_name = f"{variant['name']} ({variant['size']}, {variant['color']})"
     if variant_id_str in cart:
@@ -752,13 +752,13 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE, edit=Tru
 
     kb = [[InlineKeyboardButton("◀ Назад" , callback_data="back_to_main_menu")]]
     if not cart:
-        text = md2("🛒 Ваша корзина пуста.")
+        text = ("🛒 Ваша корзина пуста.")
         reply_markup = InlineKeyboardMarkup(kb)
     else:
         
 
-        text_raw = md2("🛒 Ваша корзина:\n\n").replace('\n', '\\n')
-        text = f"*{text_raw}*"
+        text_raw = ("🛒 Ваша корзина:\n\n")
+        text = f"<b>{text_raw}</b>"
 
 
 
@@ -767,40 +767,37 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE, edit=Tru
         for variant_id_str, item in cart.items():
             item_total = item['price'] * item['quantity']
             total_price += item_total
-            text += f"• {md2(item['name'])} \\(x{md2(item['quantity'])}\\) \\- {md2(item_total)}₸\n"
+            text += f"• <b>{item['name']}</b> (x{item['quantity']}) - <b>{item_total}₸</b>\n"
             keyboard.append([
                 InlineKeyboardButton(md2("➖"), callback_data=f"cart_minus_{variant_id_str}"),
                 InlineKeyboardButton(md2(str(item['quantity'])), callback_data="noop"),
                 InlineKeyboardButton(md2("➕"), callback_data=f"cart_plus_{variant_id_str}")
             ])
-        text += f"\n*{md2('Итого')}:* {md2(total_price)}₸"
-        keyboard.append([InlineKeyboardButton(md2("🧾 Оформить заказ"), callback_data="by_all")])
-        keyboard.append([InlineKeyboardButton(md2("🗑️ Очистить корзину"), callback_data="clear_cart")])
-        keyboard.append([InlineKeyboardButton(md2("◀ Назад ") , callback_data="back_to_main_menu") ])
+        text += f"\n<b>{md2('Итого')}:</b>  <b>{total_price}</b>₸"
+        keyboard.append([InlineKeyboardButton("🧾 Оформить заказ", callback_data="by_all")])
+        keyboard.append([InlineKeyboardButton("🗑️ Очистить корзину", callback_data="clear_cart")])
+        keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-    reply_keyboard = ReplyKeyboardMarkup(
-        [[md2("🛒 Посмотреть корзину")]],
-        resize_keyboard=True, one_time_keyboard=True, input_field_placeholder=md2("Нажмите для просмотра корзины")
-    )
+    
     if update.callback_query and edit:
         try:
             await update.callback_query.edit_message_text(
-                text=text, parse_mode="MarkdownV2", reply_markup=reply_markup
+                text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
             )
         except Exception:
             await context.bot.send_message(
-                chat_id=chat_id, text=text, parse_mode="MarkdownV2", reply_markup=reply_markup
+                chat_id=chat_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
             )
      
     else:
         if update.message:
             await update.message.reply_text(
-                text=text, parse_mode="MarkdownV2", reply_markup=reply_markup
+                text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
             )
            
         else:
             await context.bot.send_message(
-                chat_id=chat_id, text=text, parse_mode="MarkdownV2", reply_markup=reply_markup
+                chat_id=chat_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup
             )
             
         
