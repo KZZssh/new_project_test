@@ -39,10 +39,7 @@ def get_effective_message(update):
     return None
 
 
-def md2(text):
-    if not isinstance(text, str):
-        text = str(text)
-    return re.sub(r'([_\*\[\]\(\)\~\`\>\#\+\-\=\|\{\}\.\!])', r'\\\1', text)
+
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
@@ -53,12 +50,12 @@ async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
 
     context.user_data.clear()
-    message = md2("Действие отменено.")
+    message = ("Действие отменено.")
     if update.callback_query:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=message, parse_mode="MarkdownV2")
+        await update.callback_query.edit_message_text(text=message, parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(message, parse_mode="MarkdownV2")
+        await update.message.reply_text(message, parse_mode=ParseMode.HTML)
     return ConversationHandler.END
 
 async def create_new_entity(update, context, table_name, name, **kwargs):
@@ -70,25 +67,25 @@ async def create_new_entity(update, context, table_name, name, **kwargs):
     try:
         await execute(query, params)
         entity_row = await fetchone(f"SELECT id FROM {table_name} WHERE name = ? {'AND category_id = ?' if table_name == 'sub_categories' else ''}", params)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=md2(f"Сущность '{name}' успешно создана."), parse_mode="MarkdownV2")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=(f"Сущность '{name}' успешно создана."), parse_mode=ParseMode.HTML)
         return entity_row['id']
     except Exception:
         entity_row = await fetchone(f"SELECT id FROM {table_name} WHERE name = ? {'AND category_id = ?' if table_name == 'sub_categories' else ''}", params)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=md2(f"Сущность '{name}' уже существует. Выбираю существующую."), parse_mode="MarkdownV2")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=(f"Сущность '{name}' уже существует. Выбираю существующую."), parse_mode=ParseMode.HTML)
         return entity_row['id']
         
 
 # --- Добавление товара ---
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text(md2("Нет доступа."), parse_mode="MarkdownV2")
+        await update.message.reply_text("Нет доступа."), parse_mode=ParseMode.HTML
         return 
     context.user_data.clear()
     context.user_data["state"] = "get_product_name"
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text(md2("Добавляем новый товар. Введите его общее название.\n\n/cancel для отмены."), parse_mode="MarkdownV2")
-    return 
+    await query.edit_message_text("Добавляем новый товар. Введите его общее название.\n\n/cancel для отмены.", parse_mode=ParseMode.HTML)
+    return
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("DEBUG: get_name called")
@@ -108,9 +105,9 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("➕ Создать категорию", callback_data="add_cat_new")])
 
     await update.message.reply_text(
-        md2("Шаг 1: Выберите основную категорию:"),
+        ("Шаг 1: Выберите основную категорию:"),
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="MarkdownV2"
+        parse_mode=ParseMode.HTML
     )
 
 
@@ -120,7 +117,7 @@ async def get_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if query.data == "add_cat_new":
         context.user_data["state"] = "get_new_category_name"
-        await query.edit_message_text(md2("Введите название новой основной категории:"), parse_mode="MarkdownV2")
+        await query.edit_message_text("Введите название новой основной категории:", parse_mode=ParseMode.HTML)
         return
     parts = query.data.split('_')
     if len(parts) == 3 and parts[2].isdigit():
@@ -144,14 +141,14 @@ async def ask_for_subcategory(update, context):
     sub_categories = await fetchall("SELECT * FROM sub_categories WHERE category_id = ?", (category_id,))
     keyboard = [[InlineKeyboardButton(scat['name'], callback_data=f"add_subcat_{scat['id']}")] for scat in sub_categories]
     keyboard.append([InlineKeyboardButton("➕ Создать подкатегорию", callback_data="add_subcat_new")])
-    message_text = md2("Шаг 2: Выберите подкатегорию:")
+    message_text = ("Шаг 2: Выберите подкатегорию:")
     if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else:
         msg = get_effective_message(update)
         if msg:
             await msg.reply_text(
-                text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2"
+                text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
             )
     return
 
@@ -161,7 +158,7 @@ async def get_subcategory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if query.data == "add_subcat_new":
         context.user_data["state"] = "get_new_subcategory_name"
-        await query.edit_message_text(md2("Введите название новой подкатегории:"), parse_mode="MarkdownV2")
+        await query.edit_message_text("Введите название новой подкатегории:", parse_mode=ParseMode.HTML)
         return 
     parts = query.data.split('_')
     if len(parts) == 3 and parts[2].isdigit():
@@ -185,13 +182,13 @@ async def ask_for_brand(update, context):
     brands = await fetchall("SELECT * FROM brands")
     keyboard = [[InlineKeyboardButton(b['name'], callback_data=f"add_brand_{b['id']}")] for b in brands]
     keyboard.append([InlineKeyboardButton("➕ Создать новый бренд", callback_data="add_brand_new")])
-    message_text = md2("Шаг 3: Выберите бренд:")
+    message_text = ("Шаг 3: Выберите бренд:")
     if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else:
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+            await msg.reply_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     return
 
 
@@ -203,14 +200,14 @@ async def get_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if query.data == "add_brand_new":
         context.user_data["state"] = "get_new_brand_name"
-        await query.edit_message_text(md2("Введите название нового бренда:"), parse_mode="MarkdownV2")
+        await query.edit_message_text("Введите название нового бренда:", parse_mode=ParseMode.HTML)
         return
     parts = query.data.split('_')
     if len(parts) == 3 and parts[2].isdigit():
         context.user_data['new_product_brand_id'] = int(parts[2])
         context.user_data["state"] = "get_description"
-        await query.edit_message_text(md2("Бренд выбран. Шаг 4: Введите общее описание товара."), parse_mode="MarkdownV2")
-        return 
+        await query.edit_message_text("Бренд выбран. Шаг 4: Введите общее описание товара.", parse_mode=ParseMode.HTML)
+        return
     else:
         await query.answer("Ошибка формата бренда.", show_alert=True)
         return
@@ -221,7 +218,7 @@ async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['new_product_brand_id'] = brand_id
     msg = get_effective_message(update)
     if msg:
-        await msg.reply_text(md2("Бренд создан/выбран. Шаг 4: Введите общее описание товара."), parse_mode="MarkdownV2")
+        await msg.reply_text("Бренд создан/выбран. Шаг 4: Введите общее описание товара.", parse_mode=ParseMode.HTML)
     context.user_data["state"] = "get_description"
 
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -236,7 +233,7 @@ async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['current_product_id'] = product_row['id']
     msg = get_effective_message(update)
     if msg:
-        await msg.reply_text(md2(f"✅ Основная карточка товара '{data['new_product_name']}' создана.\n\nТеперь добавим первый вариант."), parse_mode="MarkdownV2")
+        await msg.reply_text(f"✅ Основная карточка товара '{data['new_product_name']}' создана.\n\nТеперь добавим первый вариант.", parse_mode=ParseMode.HTML)
     context.user_data["state"] = "choose_variant_size"
     await ask_for_variant_size(update, context)
 
@@ -247,14 +244,14 @@ async def ask_for_variant_size(update: Update, context: ContextTypes.DEFAULT_TYP
     print("ask_for_variant_size sizes:", sizes, flush=True)
     keyboard = [[InlineKeyboardButton(s['name'], callback_data=f"add_size_{s['id']}")] for s in sizes]
     keyboard.append([InlineKeyboardButton("➕ Создать новый размер", callback_data="add_size_new")])
-    msg = md2("Добавление варианта. Шаг 1: Выберите размер:")
+    msg = ("Добавление варианта. Шаг 1: Выберите размер:")
     if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else:
         msg_obj = get_effective_message(update)
         if msg_obj:
-            await msg_obj.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
-    return 
+            await msg_obj.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    return
 
 async def select_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = "choose_variant_size"
@@ -264,7 +261,7 @@ async def select_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE
     print("callback_query data:", query.data, flush=True)
     if query.data == "add_size_new":
         context.user_data["state"] = "get_new_size_name"
-        await query.edit_message_text(md2("Введите новое значение размера:"), parse_mode="MarkdownV2")
+        await query.edit_message_text("Введите новое значение размера:", parse_mode=ParseMode.HTML)
         return
     parts = query.data.split('_')
     if len(parts) == 3 and parts[2].isdigit():
@@ -288,13 +285,13 @@ async def ask_for_variant_color(update, context):
     colors = await fetchall("SELECT * FROM colors")
     keyboard = [[InlineKeyboardButton(c['name'], callback_data=f"add_color_{c['id']}")] for c in colors]
     keyboard.append([InlineKeyboardButton("➕ Создать новый цвет", callback_data="add_color_new")])
-    msg = md2("Шаг 2: Выберите цвет:")
+    msg = ("Шаг 2: Выберите цвет:")
     if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else:
         msg_obj = get_effective_message(update)
         if msg_obj:
-            await msg_obj.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+            await msg_obj.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     return
 
 async def select_variant_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -303,13 +300,13 @@ async def select_variant_color(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     if query.data == "add_color_new":
         context.user_data["state"] = "get_new_color_name"
-        await query.edit_message_text(md2("Введите название нового цвета:"), parse_mode="MarkdownV2")
+        await query.edit_message_text("Введите название нового цвета:", parse_mode=ParseMode.HTML)
         return
     parts = query.data.split('_')
     if len(parts) == 3 and parts[2].isdigit():
         context.user_data['current_variant_color_id'] = int(parts[2])
         context.user_data["state"] = "get_variant_price"  # <-- ВАЖНО!
-        await query.edit_message_text(md2("Шаг 3: Укажите цену для этого варианта (число):"), parse_mode="MarkdownV2")
+        await query.edit_message_text("Шаг 3: Укажите цену для этого варианта (число):", parse_mode=ParseMode.HTML)
         return
     else:
         await query.answer("Ошибка формата цвета.", show_alert=True)
@@ -321,7 +318,7 @@ async def get_new_color_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['current_variant_color_id'] = color_id
     msg = get_effective_message(update)
     if msg:
-        await msg.reply_text(md2("Цвет создан/выбран. Шаг 3: Укажите цену."), parse_mode="MarkdownV2")
+        await msg.reply_text("Цвет создан/выбран. Шаг 3: Укажите цену.", parse_mode=ParseMode.HTML)
     context.user_data["state"] = "get_variant_price"
     
 
@@ -331,13 +328,13 @@ async def get_variant_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_variant_price'] = float(update.message.text)
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("Цена установлена. Шаг 4: Укажите количество на складе:"), parse_mode="MarkdownV2")
-        
+            await msg.reply_text("Цена установлена. Шаг 4: Укажите количество на складе:", parse_mode=ParseMode.HTML)
+
         context.user_data["state"] = "get_variant_quantity"
     except ValueError:
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("Неверный формат. Введите цену как число."), parse_mode="MarkdownV2")
+            await msg.reply_text("Неверный формат. Введите цену как число.", parse_mode=ParseMode.HTML)
         
 
 async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -351,8 +348,8 @@ async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
     except ValueError:
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("Неверный формат. Введите количество как целое число."), parse_mode="MarkdownV2")
-        
+            await msg.reply_text("Неверный формат. Введите количество как целое число.", parse_mode=ParseMode.HTML)
+
 
 async def get_variant_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = "add_variant_photo"
@@ -384,7 +381,7 @@ async def get_variant_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Ошибка при добавлении варианта в БД: {e}")
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("Ошибка при добавлении варианта в базу данных."), parse_mode="MarkdownV2")
+            await msg.reply_text("Ошибка при добавлении варианта в базу данных.", parse_mode=ParseMode.HTML)
 
         
 async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -462,9 +459,9 @@ async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = get_effective_message(update)
         if msg:
             await msg.reply_text(
-                md2("✅ Вариант успешно добавлен. Хотите добавить еще один?"),
+                "✅ Вариант успешно добавлен. Хотите добавить еще один?",
                 reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="MarkdownV2"
+                parse_mode=ParseMode.HTML
             )
         context.user_data["state"] = "ask_add_more_variants"
         return 
@@ -474,7 +471,7 @@ async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('admin_variant_id', None)
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("✅ Фото/видео для варианта успешно добавлены."), parse_mode="MarkdownV2")
+            await msg.reply_text("✅ Фото/видео для варианта успешно добавлены.", parse_mode=ParseMode.HTML)
             context.user_data["state"] = "edit_menu"
        
         await show_edit_menu(update, context)
@@ -485,7 +482,7 @@ async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('admin_variant_id', None)
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("✅ Фото/видео успешно добавлены."), parse_mode="MarkdownV2")
+            await msg.reply_text("✅ Фото/видео успешно добавлены.", parse_mode=ParseMode.HTML)
         context.user_data["state"] = None
         return
         
@@ -509,15 +506,15 @@ async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data["state"] = "choose_variant_size"
         # Вместо удаления сообщения просто редактируем его, чтобы убрать кнопки
         await query.edit_message_text(
-            md2("Добавление нового варианта..."),
-            parse_mode="MarkdownV2",
+            "Добавление нового варианта...",
+            parse_mode=ParseMode.HTML,
             reply_markup=None
         )
         await ask_for_variant_size(update, context)
     elif query.data == 'finish_add_product':
         await query.edit_message_text(
-            md2("✅ Отлично! Все варианты для товара сохранены."),
-            parse_mode="MarkdownV2",
+            "✅ Отлично! Все варианты для товара сохранены.",
+            parse_mode=ParseMode.HTML,
             reply_markup=None
         )
         # Просто ставим флаг завершения — НЕ очищаем пока user_data
@@ -526,8 +523,8 @@ async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TY
         
     else:
         await query.edit_message_text(
-            md2("Неизвестное действие."),
-            parse_mode="MarkdownV2",
+            "Неизвестное действие.",
+            parse_mode=ParseMode.HTML,
             reply_markup=None
         )
         
@@ -542,12 +539,12 @@ async def start_edit_product(update: Update, context: ContextTypes.DEFAULT_TYPE)
     msg = get_effective_message(update)
     if not is_admin(update.effective_user.id):
         if msg:
-            await msg.reply_text(md2("Нет доступа."), parse_mode="MarkdownV2")
+            await msg.reply_text("Нет доступа.", parse_mode=ParseMode.HTML)
         return ConversationHandler.END
     product_id = context.user_data.get('product_to_edit_id')
     if not product_id:
         if msg:
-            await msg.reply_text("ID товара не определён. Повторите попытку через меню.", parse_mode="MarkdownV2")
+            await msg.reply_text("ID товара не определён. Повторите попытку через меню.", parse_mode=ParseMode.HTML)
         return ConversationHandler.END
     variant_photo = await fetchone("SELECT photo_id FROM product_variants WHERE product_id = ? AND photo_id IS NOT NULL LIMIT 1", (product_id,))
     if variant_photo:
@@ -573,11 +570,11 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE pv.product_id = ?
     """, (product_id,))
     if not product:
-        await update.effective_message.reply_text(md2(f"Товар с ID `{product_id}` не найден."), parse_mode="MarkdownV2")
+        await update.effective_message.reply_text(f"Товар с ID `{product_id}` не найден.", parse_mode=ParseMode.HTML)
         context.user_data.clear()
         return ConversationHandler.END
-    safe_name = md2(product['name'])
-    message_text = f"⚙️ Редактирование *{safe_name}* \\(ID: {md2(product_id)}\\)\n\n{md2('Выберите действие:')}"
+    safe_name = product['name']
+    message_text = f"⚙️ Редактирование <b>{safe_name}</b> \\(ID: {product_id}\\)\n\nВыберите действие:"
     keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
     if variants:
         keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
@@ -593,12 +590,12 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if getattr(update, 'callback_query', None):
         query = update.callback_query
         await query.answer()
-        await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else:
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
-    
+            await msg.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+
 
 async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -610,18 +607,18 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
             [InlineKeyboardButton("✅ Да, удалить вариант", callback_data="confirm_delete_variant"),
              InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]
         ]
-        await query.edit_message_text(md2("Вы уверены?"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await query.edit_message_text("Вы уверены?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
         return CONFIRM_DELETE_VARIANT
     elif data.startswith("delete_product_full_"):
         keyboard = [
             [InlineKeyboardButton("✅ Да, удалить ВСЁ", callback_data="confirm_delete_full"),
              InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]
         ]
-        await query.edit_message_text(md2("Вы уверены, что хотите удалить товар и ВСЕ его варианты?"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await query.edit_message_text("Вы уверены, что хотите удалить товар и ВСЕ его варианты?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
         return CONFIRM_DELETE_FULL_PRODUCT
     elif data.startswith("add_variant_to_"):
         context.user_data['current_product_id'] = int(data.split('_')[3])
-        await query.edit_message_text(md2("Перехожу в режим добавления нового варианта..."), parse_mode="MarkdownV2")
+        await query.edit_message_text("Перехожу в режим добавления нового варианта...", parse_mode=ParseMode.HTML)
         await ask_for_variant_size(update, context)
         return SELECT_VARIANT_SIZE
     elif data.startswith("edit_variant_menu_"):
@@ -632,7 +629,7 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
             [InlineKeyboardButton("Фото", callback_data=f"edit_field_photo")],
             [InlineKeyboardButton("⬅️ Назад к списку вариантов", callback_data="back_to_edit_menu_main")]
         ]
-        await query.edit_message_text(md2("Что изменить в этом варианте?"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await query.edit_message_text("Что изменить в этом варианте?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
         return SELECT_VARIANT_FIELD
     elif data == "back_to_edit_menu_main":
         await show_edit_menu(update, context)
@@ -647,10 +644,10 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 pass  # если сообщение уже удалено или слишком старое
             context.user_data.pop('edit_photo_message_id', None)
         context.user_data.clear()
-        await query.edit_message_text(md2("Редактирование завершено."), parse_mode="MarkdownV2")
+        await query.edit_message_text("Редактирование завершено.", parse_mode=ParseMode.HTML)
         return ConversationHandler.END
     else:
-        await query.edit_message_text(md2("Эта функция пока в разработке."), parse_mode="MarkdownV2")
+        await query.edit_message_text("Эта функция пока в разработке.", parse_mode=ParseMode.HTML)
         await show_edit_menu(update, context)
         return AWAIT_EDIT_ACTION
 
@@ -661,7 +658,7 @@ async def confirm_variant_delete(update: Update, context: ContextTypes.DEFAULT_T
         return await show_edit_menu(update, context)
     variant_id = context.user_data.get('variant_to_delete')
     await execute("DELETE FROM product_variants WHERE id = ?", (variant_id,))
-    await query.edit_message_text(md2("✅ Вариант удален. Обновляю меню..."), parse_mode="MarkdownV2")
+    await query.edit_message_text("✅ Вариант удален. Обновляю меню...", parse_mode=ParseMode.HTML)
     await show_edit_menu(update, context)
     return AWAIT_EDIT_ACTION
 
@@ -673,7 +670,7 @@ async def confirm_full_product_delete(update: Update, context: ContextTypes.DEFA
     product_id = context.user_data.get('product_to_edit_id')
     await execute("DELETE FROM product_variants WHERE product_id = ?", (product_id,))
     await execute("DELETE FROM products WHERE id = ?", (product_id,))
-    await query.edit_message_text(md2(f"✅ Товар с ID {product_id} и все его варианты были полностью удалены."), parse_mode="MarkdownV2")
+    await query.edit_message_text(f"✅ Товар с ID {product_id} и все его варианты были полностью удалены.", parse_mode=ParseMode.HTML)
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -687,9 +684,9 @@ async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEF
         context.user_data['media_order'] = 0
         await query.edit_message_text("Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done.")
         return GET_VARIANT_PHOTO
-    prompt = md2(f"Введите новое значение для поля '{field_to_edit}':")
+    prompt = (f"Введите новое значение для поля '{field_to_edit}':")
     keyboard = [[InlineKeyboardButton("⬅️ Назад к списку вариантов", callback_data="back_to_edit_menu_main")]]
-    await query.edit_message_text(prompt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+    await query.edit_message_text(prompt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     return GET_NEW_VARIANT_VALUE
 
 async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -708,9 +705,9 @@ async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TY
             msg = get_effective_message(update)
             if msg:
                 await msg.reply_text(
-                    md2("Пожалуйста, отправьте фото."),
+                    "Пожалуйста, отправьте фото.",
                     reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode="MarkdownV2"
+                    parse_mode=ParseMode.HTML
                 )
             return GET_NEW_VARIANT_VALUE
     else:
@@ -726,21 +723,21 @@ async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TY
             if msg:
                 # Если не удалось преобразовать значение, сообщаем об ошибке
                 await msg.reply_text(
-                    md2("Неверный формат. Введите число."),
+                    "Неверный формат. Введите число.",
                     reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode="MarkdownV2"
+                    parse_mode=ParseMode.HTML
                 )
             return GET_NEW_VARIANT_VALUE
     try:
         await execute(f"UPDATE product_variants SET {field} = ? WHERE id = ?", (new_value, variant_id))
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2(f"✅ Поле '{field}' для варианта успешно обновлено."), parse_mode="MarkdownV2")
+            await msg.reply_text(f"✅ Поле '{field}' для варианта успешно обновлено.", parse_mode=ParseMode.HTML)
     except Exception as e:
         print(f"Ошибка при обновлении варианта: {e}")
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text(md2("Ошибка при обновлении базы данных."), parse_mode="MarkdownV2")
+            await msg.reply_text("Ошибка при обновлении базы данных.", parse_mode=ParseMode.HTML)
     await show_edit_menu(update, context)
     return AWAIT_EDIT_ACTION
 
@@ -763,14 +760,14 @@ async def get_sales_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         most_popular_product_text = f"{most_popular_item} (продано {product_popularity[most_popular_item]} шт.)"
     orders_count, total_revenue = (report_data['c'] or 0), (report_data['s'] or 0)
     report_message = (
-        f"📊 *Отчет за 7 дней:*\n\n"
-        f"• *Заказов:* {md2(orders_count)}\n"
-        f"• *Выручка:* {md2(int(total_revenue))} ₸\n"
-        f"• *Хит продаж:* {md2(most_popular_product_text)}"
+        f"📊 <b>Отчет за 7 дней:</b>\n\n"
+        f"• <b>Заказов:</b> {orders_count}\n"
+        f"• <b>Выручка:</b> {int(total_revenue)} ₸\n"
+        f"• <b>Хит продаж:</b> {most_popular_product_text}"
     )
     msg = get_effective_message(update)
     if msg:
-        await msg.reply_text(report_message, parse_mode="MarkdownV2")
+        await msg.reply_text(report_message, parse_mode=ParseMode.HTML)
     
 
 from bee import fetch_products_detailed, export_to_gsheet, download_xlsx, GOOGLE_SHEET_URL
@@ -856,20 +853,20 @@ async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TY
     parts = query.data.split('_')
     # Проверка что parts[2] — это число
     if len(parts) < 3 or not parts[2].isdigit():
-        await query.edit_message_text(md2("Ошибка: некорректный формат callback data."), parse_mode="MarkdownV2")
+        await query.edit_message_text("Ошибка: некорректный формат callback data.", parse_mode=ParseMode.HTML)
         return
     action, order_id_str = query.data.split('_')[1], query.data.split('_')[2]
     order_id = int(order_id_str)
     order = await fetchone("SELECT * FROM orders WHERE id = ?", (order_id,))
     if order["status"] == "cancelled_by_client":
         await query.edit_message_text(
-            md2(f"⚠️ Невозможно изменить статус — заказ №{order_id} отменён клиентом."),
-            parse_mode="MarkdownV2"
+            f"⚠️ Невозможно изменить статус — заказ №{order_id} отменён клиентом.",
+            parse_mode=ParseMode.HTML
         )
         return
 
     if not order:
-        await query.edit_message_text(md2("Заказ не найден."), parse_mode="MarkdownV2")
+        await query.edit_message_text("Заказ не найден.", parse_mode=ParseMode.HTML)
         return
     customer_user_id = order['user_id']
     if action == "confirm":
@@ -890,9 +887,9 @@ async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TY
             kb = [[InlineKeyboardButton("История заказов 🗒" , callback_data="order_history")]]
             await context.bot.send_message(
                 chat_id=customer_user_id,
-                text="*" + md2(f"✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные") + "*",
+                text= f"<b>✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные</b>",
 
-                parse_mode="MarkdownV2",
+                parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(kb)
             )
 
@@ -904,12 +901,12 @@ async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TY
             ]
 
             await query.edit_message_text(
-                md2(f"Заказ №{order_id} подтверждён.\n\nВыберите следующий статус:"),
-                parse_mode="MarkdownV2",
+                f"Заказ №{order_id} подтверждён.\n\nВыберите следующий статус:",
+                parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(status_buttons)
             )
         except Exception:
-            await query.edit_message_text(md2("Ошибка при подтверждении заказа."), parse_mode="MarkdownV2")
+            await query.edit_message_text("Ошибка при подтверждении заказа.", parse_mode=ParseMode.HTML)
 
 
 
@@ -1152,8 +1149,8 @@ async def order_history_handler(update: Update, context: ContextTypes.DEFAULT_TY
     ])
 
     await query.edit_message_text(
-        text=md2("📋 Выберите, какие заказы хотите посмотреть:"),
-        parse_mode="MarkdownV2",
+        text="📋 Выберите, какие заказы хотите посмотреть:",
+        parse_mode=ParseMode.HTML,
         reply_markup=filter_keyboard
     )
 
@@ -1164,7 +1161,7 @@ async def order_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await asyncio.sleep(0.5)
 
     if not context.user_data.get("order_history_started"):
-        await query.edit_message_text(md2("Сначала откройте историю заказов."), parse_mode="MarkdownV2")
+        await query.edit_message_text("Сначала откройте историю заказов.", parse_mode=ParseMode.HTML)
         return
 
     filter_type = query.data.replace("order_filter_", "")
@@ -1183,8 +1180,8 @@ async def order_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             [InlineKeyboardButton("🔙 Назад к истории заказов", callback_data="back_to_order_history")]
         ])
         await query.edit_message_text(
-            md2("❗ У вас пока нет заказов по выбранному фильтру."),
-            parse_mode="MarkdownV2",
+            "❗ У вас пока нет заказов по выбранному фильтру.",
+            parse_mode=ParseMode.HTML,
             reply_markup=back_btn
         )
         return
@@ -1223,23 +1220,23 @@ async def show_orders_text(update, context, orders, filter_type, page):
     }
 
     order = sliced_orders[0]
-    order_id = md2(str(order["id"]))
+    order_id = f"{order['id']}"
     raw_status = order["status"]
-    status = md2(status_names.get(raw_status, raw_status))
-    total = md2(str(order["total_price"]))
+    status = f"{status_names.get(raw_status, raw_status)}"
+    total = f"{order['total_price']}"
     cart = json.loads(order["cart"])
     cart_text = "\n".join([
-        f"• {md2(item['name'])} \\(x{md2(item['quantity'])}\\)" for item in cart.values()
+        f"• {item['name']} \\(x{item['quantity']}\\)" for item in cart.values()
     ])
     msg = (
         f"🧾 *Чек №{order_id}*\n"
-        f"*Клиент:* {md2(order['user_name'])}\n"
-        f"*Тел:* {md2(order['user_phone'])}\n"
-        f"*Адрес:* {md2(order['user_address'])}\n"
+        f"*Клиент:* {order['user_name']}\n"
+        f"*Тел:* {order['user_phone']}\n"
+        f"*Адрес:* {order['user_address']}\n"
         f"*Сумма:* {total} ₸\n"
         f"*Статус:* `{status}`\n"
         f"*Состав:*\n{cart_text}\n"
-        f"*Дата:* {md2(order['created_at'])}"
+        f"*Дата:* {order['created_at']}"
     )
 
     buttons = []
@@ -1258,7 +1255,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
 
     await query.edit_message_text(
         text=msg,
-        parse_mode="MarkdownV2",
+        parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -1281,8 +1278,8 @@ async def cancel_from_history_handler(update: Update, context: ContextTypes.DEFA
         ]
     ]
     await query.edit_message_text(
-        text=md2("❗ Вы уверены, что хотите отменить этот заказ?"),
-        parse_mode="MarkdownV2",
+        text="❗ Вы уверены, что хотите отменить этот заказ?",
+        parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1371,8 +1368,8 @@ async def back_to_order_history(update: Update, context: ContextTypes.DEFAULT_TY
     ])
 
     await query.edit_message_text(
-        text=md2("📋 Выберите, какие заказы хотите посмотреть:"),
-        parse_mode="MarkdownV2",
+        text="📋 Выберите, какие заказы хотите посмотреть:",
+        parse_mode=ParseMode.HTML,
         reply_markup=filter_keyboard
     )
 
@@ -1698,7 +1695,7 @@ def admin_menu_keyboard():
 
 async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text(md2("Нет доступа."), parse_mode="MarkdownV2")
+        await update.message.reply_text("Нет доступа.", parse_mode="HTML")
         return ConversationHandler.END
     await update.message.reply_text(
         "⚙️ <b>Админ-панель. Выберите действие:</b>",
