@@ -5,8 +5,7 @@ primary_region = "fra"
   dockerfile = "Dockerfile"
 
 [env]
-  PORT = "8080"
-  PYTHONUNBUFFERED = "1"
+PORT = "8080"
 
 [[services]]
   internal_port = 8080
