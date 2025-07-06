@@ -3,4 +3,7 @@ __pycache__/
 *.db
 credentials.json
 .env
+<<<<<<< HEAD
 
+=======
+>>>>>>> 1d727e2 (Добавил .gitignore)
