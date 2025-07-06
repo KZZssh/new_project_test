@@ -44,7 +44,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern="^admin_"))
+    
     # Все  add_handler'ы без изменений:
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
