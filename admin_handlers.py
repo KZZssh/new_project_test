@@ -1900,7 +1900,7 @@ edit_product_handler = ConversationHandler(
         ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")],
     },
     fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
-    per_user=True, per_chat=True
+    per_user=True, per_chat=True , per_message=True
 )
 
 # --- Главное меню ---
@@ -1915,7 +1915,7 @@ admin_menu_convhandler = ConversationHandler(
 
     },
     fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
-    per_user=True, per_chat=True
+    per_user=True, per_chat=True , per_message=True
 )
 
 

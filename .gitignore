@@ -3,6 +3,7 @@ __pycache__/
 *.db
 credentials.json
 .env
+hello-fly
 <<<<<<< HEAD
 
 =======
