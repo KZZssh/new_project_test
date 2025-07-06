@@ -1896,7 +1896,7 @@ admin_menu_convhandler = ConversationHandler(
     ],
     per_user=True,
     per_chat=True,
-    per_message=True
+    
 )
 
 edit_product_handler = ConversationHandler(
@@ -1951,7 +1951,7 @@ edit_product_handler = ConversationHandler(
     ],
     per_user=True,
     per_chat=True,
-    per_message=True
+    
 )
 
 subcat_rename_conv = ConversationHandler(
@@ -1963,8 +1963,7 @@ subcat_rename_conv = ConversationHandler(
     },
     fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_subcat)],
     per_user=True,
-    per_chat=True,
-    per_message=True
+    per_chat=True
 )
 
 brand_rename_conv = ConversationHandler(
@@ -1977,7 +1976,7 @@ brand_rename_conv = ConversationHandler(
     fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_brand)],
     per_user=True,
     per_chat=True,
-    per_message=True
+    
 )
 
 # === Одиночные CallbackHandlers ===

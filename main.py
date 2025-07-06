@@ -34,7 +34,7 @@ logging.basicConfig(
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Все твои add_handler'ы без изменений:
+    # Все  add_handler'ы без изменений:
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
     application.add_handler(catalog_handler)

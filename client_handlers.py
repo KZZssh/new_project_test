@@ -1292,7 +1292,8 @@ async def show_reply_main_menu(update: Update, context, text="Добро пож�
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     try:
-        await update.message.delete()  # ← удаляет сообщение с /start
+        await update.message.delete()
+        await update.message.reply_text( "--------------Главная меню----------", reply_markup=get_reply_menu())  # ← удаляет сообщение с /start
     except Exception as e:
         print("Не удалось удалить /start:", e)
 
