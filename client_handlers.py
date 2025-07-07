@@ -1155,13 +1155,14 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    c.name AS category,
                    sc.name AS subcategory,
                    b.name AS brand,
-                   MIN(pv.price) AS min_price
+                   MIN(pv.price) AS min_price,
+                   MAX(pv.photo_url) AS photo_url
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
             LEFT JOIN brands b ON p.brand_id = b.id
             LEFT JOIN product_variants pv ON p.id = pv.product_id
-            GROUP BY p.id
+            GROUP BY p.id, p.name, p.description, c.name, sc.name, b.name
             LIMIT 10
         """
         params = ()
@@ -1171,7 +1172,8 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    c.name AS category,
                    sc.name AS subcategory,
                    b.name AS brand,
-                   MIN(pv.price) AS min_price
+                   MIN(pv.price) AS min_price,
+                   MAX(pv.photo_url) AS photo_url
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
@@ -1179,7 +1181,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             LEFT JOIN product_variants pv ON p.id = pv.product_id
             WHERE p.name LIKE ? OR p.description LIKE ? OR
                   c.name LIKE ? OR sc.name LIKE ? OR b.name LIKE ?
-            GROUP BY p.id
+            GROUP BY p.id, p.name, p.description, c.name, sc.name, b.name
             LIMIT 10
         """
         params = (f"%{query_text}%",) * 5
@@ -1194,9 +1196,9 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         subcat = p["subcategory"] or "—"
         brand = p["brand"] or "—"
         price = int(p["min_price"]) if p["min_price"] else 0
+        thumb_url = p["photo_url"]
 
-        # --- ЛОГ ДЛЯ ОТЛАДКИ ---
-        print("INLINE PRODUCT:", name, category, subcat, brand, price)
+        print("INLINE PRODUCT:", name, category, subcat, brand, price, "📷", thumb_url)
 
         message = (
             f"<b>{name}</b>\n\n"
@@ -1215,6 +1217,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message,
                 parse_mode="HTML"
             ),
+            thumbnail_url=thumb_url if thumb_url else None,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Подробнее", url=f"https://t.me/{context.bot.username}?start=prod_{p['id']}")]
             ])
@@ -1222,8 +1225,6 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results.append(result)
 
     await update.inline_query.answer(results, cache_time=1)
-
-
 
 
 
