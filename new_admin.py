@@ -403,7 +403,7 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await finish_media(update, context)
 
     BOT_TOKEN = "7014521370:AAHgMni3jXKU4n0hz7l-hFXigTTvseK8yiE"
-    FLASK_UPLOAD_URL = "https://redesigned-telegram-wr4jjqpv56w7c5j9-5000.app.github.dev/upload"
+    FLASK_UPLOAD_URL = "https://flask-media-server.fly.dev/upload"
 
     # --- PHOTO ---
     if update.message.photo:
