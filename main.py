@@ -15,7 +15,7 @@ from admin_handlers import (
     get_new_size_name, get_new_color_name, get_variant_price, get_variant_quantity,
     handle_done_command, update_order_status_admin, order_history_handler, order_filter_handler,
     cancel_from_history_handler, confirm_cancel_from_history, back_to_order_history,
-    pagination_handler, handle_admin_rejection_after_confirm
+    pagination_handler, handle_admin_rejection_after_confirm 
 )
 
 from client_handlers import (
@@ -33,13 +33,15 @@ logging.basicConfig(
 )
 
 
-  
+async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("⚠️ [DEBUG CALLBACK GLOBAL]:", update.callback_query.data)
 
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Все  add_handler'ы без изменений:
+    application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
     application.add_handler(catalog_handler)
@@ -63,6 +65,7 @@ def main():
     application.add_handler(clear_cart_handler)
     application.add_handler(payment_confirmation_handler)
     application.add_handler(checkout_handler)
+    
     application.add_handler(CallbackQueryHandler(color_photo_pagination, pattern=r"^colorphoto_\d+_\d+_\d+$"))
     application.add_handler(InlineQueryHandler(inlinequery))
     application.add_handler(CallbackQueryHandler(cancel_by_client, pattern=r"^cancel_by_client_\d+$"))
@@ -80,6 +83,8 @@ def main():
         add_product_callback_handler,
         pattern=r"^(add_cat_\d+|add_cat_new|add_subcat_\d+|add_subcat_new|add_brand_\d+|add_brand_new|add_size_\d+|add_size_new|add_color_\d+|add_color_new|add_more_variants|finish_add_product)$"
     ), group=3)
+    
+
     application.add_handler(CallbackQueryHandler(update_order_status_admin, pattern=r"^status_(preparing|shipped|delivered)_\d+$"))
     application.add_handler(CallbackQueryHandler(order_history_handler, pattern="^order_history$"))
     application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"))
