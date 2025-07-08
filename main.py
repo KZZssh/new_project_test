@@ -34,7 +34,7 @@ async def main() -> None:
     """Основная асинхронная функция для настройки и запуска бота."""
     
     # Запускаем без сохранения состояния, чтобы исключить ошибки
-    application = Application.builder().token("7014521370:AAHgMni3jXKU4n0hz7l-hFXigTTvseK8yiE").build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # --- РЕГИСТРИРУЕМ ТОЛЬКО ОДИН ТЕСТОВЫЙ ОБРАБОТЧИК ---
     application.add_handler(CommandHandler("start", start_diagnostic))
@@ -48,7 +48,11 @@ async def main() -> None:
     async def telegram(request: Request) -> Response:
         logging.info("Received an update from Telegram, passing to the final diagnostic handler...")
         try:
-            await application.process_update(await request.json())
+            # === ЖАҢА ЖОЛ: КЕЛГЕН ДЕРЕКТЕРДІ ЛОГҚА ШЫҒАРУ ===
+            update_data = await request.json()
+            logging.info(f"TELEGRAM PAYLOAD: {update_data}") # <-- ОСЫ ЖОЛ МӘСЕЛЕНІ КӨРСЕТЕДІ
+
+            await application.process_update(update_data)
         except Exception as e:
             logging.error(f"Error processing update: {e}", exc_info=True)
         return Response(status_code=200)
