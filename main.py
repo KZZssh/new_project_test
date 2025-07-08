@@ -55,9 +55,9 @@ async def main() -> None:
     """Основная асинхронная функция для настройки и запуска бота."""
     
     # === ИЗМЕНЕНИЕ 1: ВРЕМЕННО ОТКЛЮЧАЕМ PERSISTENCE ===
-    # persistence = PicklePersistence(filepath="bot_data.pkl")
+    persistence = PicklePersistence(filepath="bot_data.pkl")
     application = (
-        Application.builder().token(BOT_TOKEN).build() # Убрали .persistence(persistence)
+        Application.builder().token(BOT_TOKEN).persistence(persistence).build()
     )
 
     # --- Регистрация всех ваших обработчиков ---
