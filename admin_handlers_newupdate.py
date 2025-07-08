@@ -41,7 +41,7 @@ def get_effective_message(update):
     # === Состояния для переименования (остаются как есть) ===
     RENAME_SUBCAT, RENAME_BRAND
 
-) = range(500, 534)
+) = range(500, 533)
 
 # --- Вспомогательные функции (без изменений) ---
 
