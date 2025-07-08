@@ -5,7 +5,7 @@ primary_region = "fra"
   dockerfile = "Dockerfile"
 
 [env]
-PORT = "8080"
+  PORT = "8080"
 
 [experimental]
   auto_rollback = true
@@ -14,27 +14,28 @@ PORT = "8080"
   strategy = "rolling"
 
 [[services]]
-  internal_port = 8080
   protocol = "tcp"
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
+  internal_port = 8080
+  processes = ["app"]
 
   [services.concurrency]
     type = "connections"
-    hard_limit = 1
-    soft_limit = 1
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
 
   [[services.http_checks]]
-    interval = "15s"          # Как часто выполнять проверку
-    timeout = "10s"           # Сколько ждать ответа
-    grace_period = "30s"      # **ВАЖНО**: Подождать 30с после старта перед первой проверкой
-    method = "get"
-    path = "/"                # Проверять корневой путь
+    interval = "15s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/health"
     protocol = "http"
-    tls_skip_verify = true    # Если у вас нет валидного сертификата внутри контейнера
+    timeout = "10s"
+    tls_skip_verify = true
