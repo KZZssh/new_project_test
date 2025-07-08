@@ -158,9 +158,9 @@ async def main() -> None:
     # --- Запускаем все вместе ---
     async with application:
         await application.bot.set_webhook(
-            url=f"https://new-project-test.fly.dev/{webhook_path}"
+            url=f"https://new-project-test.fly.dev{webhook_path}"
         )
-        logging.info("Application started successfully! (Persistence is OFF)")
+        logging.info("Application started successfully! (Persistence is ON)")
         await web_server.serve()
 
 
