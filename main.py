@@ -5,6 +5,33 @@ from configs import BOT_TOKEN
 from telegram import Update 
 from telegram.ext import ContextTypes , PicklePersistence
 
+
+
+# --- НОВЫЕ ИМПОРТЫ ДЛЯ ВЕБ-СЕРВЕРА ---
+import uvicorn
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, Response
+from starlette.routing import Route
+
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'ok')
+        else:
+            # Если это запрос от Telegram, он пойдет по другому пути
+            # и будет обработан стандартным `run_webhook`.
+            # Здесь мы просто возвращаем ошибку, чтобы не мешать.
+            self.send_response(404)
+            self.end_headers()
+
 # --- Импорт всех твоих обработчиков --- (оставлено без изменений)
 from admin_handlers import (
     add_product_text_handler, add_product_callback_handler, add_product_media_handler, finish_media,
@@ -37,7 +64,7 @@ async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     print("⚠️ [DEBUG CALLBACK GLOBAL]:", update.callback_query.data)
 
 
-def main():
+async def main() -> None:
     persistence = PicklePersistence(filepath="bot_data.pkl")
 
     application = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
@@ -107,30 +134,49 @@ def main():
     application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
     application.add_handler(nazad_to_admin_menu_handler)
 
+
+
+    await application.initialize()
+
+    # --- Настройка веб-сервера Starlette ---
     
+    # Это эндпоинт для health check от Fly.io
+    async def health(_: Request) -> PlainTextResponse:
+        return PlainTextResponse(content="The bot is running...")
 
- 
-    persistence = PicklePersistence(filepath="bot_data.pkl")  # ✅ сохранение состояния
+    # Это эндпоинт, который будет принимать обновления от Telegram
+    async def telegram(request: Request) -> Response:
+        await application.process_update(
+            await request.json(),
+        )
+        return Response(status_code=200)
 
-    
-    # --- add_handler блок оставляем без изменений ---
+    # Определяем маршруты: один для Telegram, другой для Fly.io
+    webhook_path = "/telegram" # Можно использовать любой путь
+    routes = [
+        Route(webhook_path, endpoint=telegram, methods=["POST"]),
+        Route("/health", endpoint=health, methods=["GET"]),
+    ]
 
-    logging.info("Bot started. Press Ctrl+C to stop.")
-
-    port = int(os.environ.get("PORT", 8080))
-    webhook_path = f"my_first_project_2006_06"
-    my_secret_token = "MySuperSecretPassword-For-Telegram-Only-1122"
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=webhook_path,
-        # 2. Установите полный URL веб-хука для Telegram без токена
-        webhook_url=f"https://new-project-test.fly.dev/{webhook_path}",
-        # 3. Передайте токен бота безопасно в метод set_webhook
-        
+    # Создаем веб-сервер
+    starlette_app = Starlette(routes=routes)
+    web_server = uvicorn.Server(
+        config=uvicorn.Config(
+            app=starlette_app,
+            port=int(os.environ.get("PORT", 8080)),
+            host="0.0.0.0",
+        )
     )
 
+    # --- Запускаем все вместе ---
+    # Устанавливаем вебхук и запускаем веб-сервер
+    async with application:
+        await application.bot.set_webhook(
+            url=f"https://new-project-test.fly.dev{webhook_path}" # Укажите ваше доменное имя
+        )
+        await web_server.serve()
 
 
 if __name__ == "__main__":
-    main()
+    # Запускаем асинхронную функцию main
+    asyncio.run(main())
