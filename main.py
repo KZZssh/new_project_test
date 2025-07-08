@@ -3,7 +3,7 @@ import os
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, MessageHandler, filters, ConversationHandler
 from configs import BOT_TOKEN
 from telegram import Update 
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes , PicklePersistence
 
 # --- Импорт всех твоих обработчиков --- (оставлено без изменений)
 from admin_handlers import (
@@ -38,6 +38,8 @@ async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def main():
+    persistence = PicklePersistence(filepath="bot_data.pkl")
+
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Все  add_handler'ы без изменений:
@@ -105,6 +107,14 @@ def main():
     application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
     application.add_handler(nazad_to_admin_menu_handler)
 
+    
+
+ 
+    persistence = PicklePersistence(filepath="bot_data.pkl")  # ✅ сохранение состояния
+
+    application = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+    # --- add_handler блок оставляем без изменений ---
+
     logging.info("Bot started. Press Ctrl+C to stop.")
 
     # 🔁 Запуск через Webhook на сервере Fly.io
@@ -119,6 +129,7 @@ def main():
     else:
         # 🧪 Локальный запуск
         application.run_polling()
+
 
 
 if __name__ == "__main__":

@@ -225,12 +225,17 @@ async def get_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     parts = query.data.split('_')
     if len(parts) == 3 and parts[2].isdigit():
         context.user_data['new_product_brand_id'] = int(parts[2])
+        # Только если все нужные ключи уже есть
+        required_keys = ['new_product_name', 'new_product_category_id', 'new_product_sub_category_id']
+        missing = [k for k in required_keys if k not in context.user_data]
+        if missing:
+            await query.edit_message_text(f"⚠️ Не хватает данных: {', '.join(missing)}. Вернитесь назад.")
+            return
+
         context.user_data["state"] = "get_description"
         await query.edit_message_text("Бренд выбран. Шаг 4: Введите общее описание товара.", parse_mode=ParseMode.HTML)
-        return
-    else:
-        await query.answer("Ошибка формата бренда.", show_alert=True)
-        return
+
+    
 
 async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = "get_new_brand_name"
@@ -238,8 +243,11 @@ async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['new_product_brand_id'] = brand_id
     msg = get_effective_message(update)
     if msg:
+        context.user_data["state"] = "get_description"
         await msg.reply_text("Бренд создан/выбран. Шаг 4: Введите общее описание товара.", parse_mode=ParseMode.HTML)
-    context.user_data["state"] = "get_description"
+    return
+
+    
 
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("DEBUG user_data before get_description:", context.user_data)
