@@ -118,14 +118,17 @@ def main():
     logging.info("Bot started. Press Ctrl+C to stop.")
 
     port = int(os.environ.get("PORT", 8080))
-    app_url = f"https://new-project-test.fly.dev/{BOT_TOKEN}"
+    webhook_path = f"my_first_project_2006_06"
 
     application.run_webhook(
         listen="0.0.0.0",
         port=port,
-        webhook_url=app_url
+        url_path=webhook_path,
+        # 2. Установите полный URL веб-хука для Telegram без токена
+        webhook_url=f"https://new-project-test.fly.dev/{webhook_path}",
+        # 3. Передайте токен бота безопасно в метод set_webhook
+        secret_token=BOT_TOKEN 
     )
-        
 
 
 

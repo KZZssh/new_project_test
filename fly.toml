@@ -29,3 +29,12 @@ PORT = "8080"
     type = "connections"
     hard_limit = 1
     soft_limit = 1
+
+  [[services.http_checks]]
+    interval = "15s"          # Как часто выполнять проверку
+    timeout = "10s"           # Сколько ждать ответа
+    grace_period = "30s"      # **ВАЖНО**: Подождать 30с после старта перед первой проверкой
+    method = "get"
+    path = "/"                # Проверять корневой путь
+    protocol = "http"
+    tls_skip_verify = true    # Если у вас нет валидного сертификата внутри контейнера
