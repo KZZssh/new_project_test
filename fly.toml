@@ -7,6 +7,12 @@ primary_region = "fra"
 [env]
 PORT = "8080"
 
+[experimental]
+  auto_rollback = true
+
+[deploy]
+  strategy = "rolling"
+
 [[services]]
   internal_port = 8080
   protocol = "tcp"
@@ -18,3 +24,8 @@ PORT = "8080"
   [[services.ports]]
     port = 443
     handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 1
+    soft_limit = 1

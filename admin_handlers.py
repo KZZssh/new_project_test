@@ -8,6 +8,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+
 import os
 import aiohttp
 from configs import FLASK_UPLOAD_URL
@@ -19,6 +20,9 @@ import telegram.error
 from telegram.helpers import escape_markdown
 from configs import ADMIN_IDS
 from db import fetchall, fetchone, execute
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 
 (
     GET_NAME, GET_CATEGORY, GET_SUBCATEGORY, GET_BRAND, GET_DESCRIPTION,
@@ -229,7 +233,22 @@ async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("DEBUG user_data before get_description:", context.user_data)
     context.user_data["state"] = "get_description"
+    print("📦 context.user_data:", context.user_data)
+
     data = context.user_data
+
+    required_keys = [
+        'new_product_name',
+        'new_product_category_id',
+        'new_product_sub_category_id',
+        'new_product_brand_id'
+    ]
+
+    missing = [key for key in required_keys if key not in data]
+    if missing:
+        await update.message.reply_text(f"❌ Отсутствуют данные: {', '.join(missing)}. Заполните все шаги.")
+        return
+
     await execute(
         "INSERT INTO products (name, description, category_id, sub_category_id, brand_id) VALUES (?, ?, ?, ?, ?)",
         (data['new_product_name'], update.message.text, data['new_product_category_id'], data['new_product_sub_category_id'], data['new_product_brand_id'])
