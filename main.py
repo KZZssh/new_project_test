@@ -1,7 +1,8 @@
 import logging
 import os
 import asyncio
-from telegram.ext import Application
+from telegram import Update
+from telegram.ext import Application, ContextTypes, CommandHandler
 
 # --- Веб-сервер ---
 import uvicorn
@@ -12,8 +13,6 @@ from starlette.routing import Route
 
 # --- Ваши импорты ---
 from configs import BOT_TOKEN
-# --- ВАЖНО: ИМПОРТИРУЕМ ТОЛЬКО ОДИН ОБРАБОТЧИК ДЛЯ ТЕСТА ---
-from client_handlers import start_handler 
 
 # Настройка логирования
 logging.basicConfig(
@@ -21,24 +20,33 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# === ТЕСТОВЫЙ ОБРАБОТЧИК ПРЯМО ЗДЕСЬ ===
+async def start_diagnostic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет тестовое сообщение в ответ на /start."""
+    logging.info("--- !!! FINAL DIAGNOSTIC: /start handler was called! Attempting to reply...")
+    try:
+        await update.message.reply_text("ПОБЕДА! Бот отвечает!")
+        logging.info("--- !!! FINAL DIAGNOSTIC: Reply sent successfully!")
+    except Exception as e:
+        logging.error(f"--- !!! FINAL DIAGNOSTIC: FAILED TO SEND REPLY! Error: {e}", exc_info=True)
+
 async def main() -> None:
     """Основная асинхронная функция для настройки и запуска бота."""
     
     # Запускаем без сохранения состояния, чтобы исключить ошибки
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # --- РЕГИСТРИРУЕМ ТОЛЬКО START_HANDLER ---
-    logging.info("Registering ONLY the diagnostic start_handler...")
-    application.add_handler(start_handler)
+    # --- РЕГИСТРИРУЕМ ТОЛЬКО ОДИН ТЕСТОВЫЙ ОБРАБОТЧИК ---
+    application.add_handler(CommandHandler("start", start_diagnostic))
     
     await application.initialize()
 
     # --- Настройка веб-сервера (без изменений) ---
     async def health(_: Request) -> PlainTextResponse:
-        return PlainTextResponse(content="The bot is running in diagnostic mode...")
+        return PlainTextResponse(content="The bot is running in final diagnostic mode...")
 
     async def telegram(request: Request) -> Response:
-        logging.info("Received an update from Telegram, passing to diagnostic handler...")
+        logging.info("Received an update from Telegram, passing to the final diagnostic handler...")
         try:
             await application.process_update(await request.json())
         except Exception as e:
@@ -65,7 +73,7 @@ async def main() -> None:
         await application.bot.set_webhook(
             url=f"https://new-project-test.fly.dev{webhook_path}"
         )
-        logging.info("Diagnostic application started successfully!")
+        logging.info("Final diagnostic application started successfully!")
         await web_server.serve()
 
 
