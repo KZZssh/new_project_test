@@ -1,38 +1,22 @@
 import logging
 import os
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, MessageHandler, filters, ConversationHandler
-from configs import BOT_TOKEN
-from telegram import Update 
-from telegram.ext import ContextTypes , PicklePersistence
 import asyncio
+from telegram import Update
+from telegram.ext import (
+    Application, ContextTypes, PicklePersistence, CommandHandler, 
+    CallbackQueryHandler, InlineQueryHandler, MessageHandler, filters, 
+    ConversationHandler
+)
 
-
-# --- НОВЫЕ ИМПОРТЫ ДЛЯ ВЕБ-СЕРВЕРА ---
+# --- Веб-сервер ---
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
-
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'ok')
-        else:
-            # Если это запрос от Telegram, он пойдет по другому пути
-            # и будет обработан стандартным `run_webhook`.
-            # Здесь мы просто возвращаем ошибку, чтобы не мешать.
-            self.send_response(404)
-            self.end_headers()
-
-# --- Импорт всех твоих обработчиков --- (оставлено без изменений)
+# --- Ваши импорты ---
+from configs import BOT_TOKEN
 from admin_handlers import (
     add_product_text_handler, add_product_callback_handler, add_product_media_handler, finish_media,
     edit_product_handler, report_handler, admin_decision_handler, cancel_dialog, cat_manage_handler,
@@ -42,9 +26,8 @@ from admin_handlers import (
     get_new_size_name, get_new_color_name, get_variant_price, get_variant_quantity,
     handle_done_command, update_order_status_admin, order_history_handler, order_filter_handler,
     cancel_from_history_handler, confirm_cancel_from_history, back_to_order_history,
-    pagination_handler, handle_admin_rejection_after_confirm 
+    pagination_handler, handle_admin_rejection_after_confirm
 )
-
 from client_handlers import (
     start_handler, catalog_handler, reply_cart_handler, subcategories_handler, brands_handler,
     brand_slider_handler, all_slider_handler, brand_slider_nav_handler, all_slider_nav_handler,
@@ -55,22 +38,21 @@ from client_handlers import (
     cancel_by_client, confirm_cancel, back_to_payment, back_to_main_menu_handler
 )
 
+# Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
-
-
-async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("⚠️ [DEBUG CALLBACK GLOBAL]:", update.callback_query.data)
-
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 async def main() -> None:
+    """Основная асинхронная функция для настройки и запуска бота."""
+    
     persistence = PicklePersistence(filepath="bot_data.pkl")
+    application = (
+        Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+    )
 
-    application = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
-
-    # Все  add_handler'ы без изменений:
-    application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
+ 
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
     application.add_handler(catalog_handler)
@@ -136,29 +118,28 @@ async def main() -> None:
 
 
 
+
+
+    # Инициализируем приложение бота, чтобы оно было готово обрабатывать запросы
     await application.initialize()
 
     # --- Настройка веб-сервера Starlette ---
     
-    # Это эндпоинт для health check от Fly.io
     async def health(_: Request) -> PlainTextResponse:
         return PlainTextResponse(content="The bot is running...")
 
-    # Это эндпоинт, который будет принимать обновления от Telegram
     async def telegram(request: Request) -> Response:
         await application.process_update(
-            await request.json(),
+            await request.json()
         )
         return Response(status_code=200)
 
-    # Определяем маршруты: один для Telegram, другой для Fly.io
-    webhook_path = "/telegram" # Можно использовать любой путь
+    webhook_path = "/telegram"
     routes = [
         Route(webhook_path, endpoint=telegram, methods=["POST"]),
         Route("/health", endpoint=health, methods=["GET"]),
     ]
 
-    # Создаем веб-сервер
     starlette_app = Starlette(routes=routes)
     web_server = uvicorn.Server(
         config=uvicorn.Config(
@@ -169,14 +150,13 @@ async def main() -> None:
     )
 
     # --- Запускаем все вместе ---
-    # Устанавливаем вебхук и запускаем веб-сервер
     async with application:
         await application.bot.set_webhook(
-            url=f"https://new-project-test.fly.dev{webhook_path}" # Укажите ваше доменное имя
+            url=f"https://new-project-test.fly.dev{webhook_path}"
         )
+        logging.info("Application started successfully!")
         await web_server.serve()
 
 
 if __name__ == "__main__":
-    # Запускаем асинхронную функцию main
     asyncio.run(main())
