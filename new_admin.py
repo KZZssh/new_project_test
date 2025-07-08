@@ -228,6 +228,7 @@ async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("DEBUG user_data before get_description:", context.user_data)
     context.user_data["state"] = "get_description"
+    context.user_data['new_product_name'] = update.message.text
     data = context.user_data
     await execute(
         "INSERT INTO products (name, description, category_id, sub_category_id, brand_id) VALUES (?, ?, ?, ?, ?)",

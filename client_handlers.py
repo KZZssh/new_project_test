@@ -1337,7 +1337,7 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     t = "Добро пожаловть !"
-    update.message.reply_text(
+    await update.message.reply_text(
         text=t,
         reply_markup=kb,
         parse_mode=ParseMode.HTML
