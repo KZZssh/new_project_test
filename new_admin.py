@@ -8,6 +8,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+from configs import FLASK_UPLOAD_URL
+
 import os
 import aiohttp
 from telegram.constants import ParseMode
@@ -27,11 +29,10 @@ from db import fetchall, fetchone, execute
     GET_VARIANT_PRICE, GET_VARIANT_QUANTITY, GET_VARIANT_PHOTO,
     ASK_ADD_MORE_VARIANTS,
     AWAIT_EDIT_ACTION,
-    RETURN_TO_EDIT,
     CONFIRM_DELETE_VARIANT, CONFIRM_DELETE_FULL_PRODUCT,
     SELECT_VARIANT_FIELD, GET_NEW_VARIANT_VALUE,
     SELECT_GENERAL_FIELD, GET_NEW_GENERAL_VALUE
-) = range(24)
+) = range(23)
 
 def get_effective_message(update):
     # Вернёт message для обычного сообщения или callback_query.message для кнопки
@@ -157,6 +158,7 @@ async def ask_for_subcategory(update, context):
     return
 
 async def get_subcategory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     context.user_data["state"] = "choose_subcategory"
     query = update.callback_query
     await query.answer()
@@ -228,7 +230,24 @@ async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("DEBUG user_data before get_description:", context.user_data)
     context.user_data["state"] = "get_description"
-    context.user_data['new_product_name'] = update.message.text
+    
+    data = context.user_data
+
+    required_fields = [
+        'new_product_name',
+        'new_product_category_id',
+        'new_product_sub_category_id',
+        'new_product_brand_id'
+    ]
+
+    for field in required_fields:
+        if field not in data:
+            await update.message.reply_text(
+                f"⚠️ Ошибка: не найдено поле {field}.\nВозможно, вы начали не с начала. Попробуйте /cancel и начните заново.",
+                parse_mode=ParseMode.HTML
+            )
+            return
+    
     data = context.user_data
     await execute(
         "INSERT INTO products (name, description, category_id, sub_category_id, brand_id) VALUES (?, ?, ?, ?, ?)",
@@ -404,7 +423,7 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await finish_media(update, context)
 
     BOT_TOKEN = "7014521370:AAHgMni3jXKU4n0hz7l-hFXigTTvseK8yiE"
-    FLASK_UPLOAD_URL = "https://flask-media-server.fly.dev/upload"
+    
 
     # --- PHOTO ---
     if update.message.photo:
