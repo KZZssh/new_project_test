@@ -15,7 +15,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
-# --- Ваши импорты ---
+# --- Сіздің импорттарыңыз ---
 from configs import BOT_TOKEN
 from admin_handlers import (
     add_product_text_handler, add_product_callback_handler, add_product_media_handler, finish_media,
@@ -28,7 +28,7 @@ from admin_handlers import (
     cancel_from_history_handler, confirm_cancel_from_history, back_to_order_history,
     pagination_handler, handle_admin_rejection_after_confirm
 )
-from client_handlers import (
+from client_handlers_org import (
     start_handler, catalog_handler, reply_cart_handler, subcategories_handler, brands_handler,
     brand_slider_handler, all_slider_handler, brand_slider_nav_handler, all_slider_nav_handler,
     details_handler, choose_color_handler, choose_size_handler, back_to_slider_handler,
@@ -38,13 +38,12 @@ from client_handlers import (
     cancel_by_client, confirm_cancel, back_to_payment, back_to_main_menu_handler
 )
 
-# Настройка логирования
+# Логгингті баптау
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Добавляем недостающую функцию для отладки
 async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query:
@@ -52,15 +51,14 @@ async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def main() -> None:
-    """Основная асинхронная функция для настройки и запуска бота."""
+    """Ботты баптап, іске қосатын негізгі асинхронды функция."""
     
-    # === ИЗМЕНЕНИЕ 1: ВРЕМЕННО ОТКЛЮЧАЕМ PERSISTENCE ===
     persistence = PicklePersistence(filepath="bot_data.pkl")
     application = (
         Application.builder().token(BOT_TOKEN).persistence(persistence).build()
     )
 
-    # --- Регистрация всех ваших обработчиков ---
+    # --- Барлық обработчиктерді тіркеу ---
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
@@ -93,6 +91,8 @@ async def main() -> None:
     application.add_handler(help_handler)
     application.add_handler(reply_main_menu_handler)
     application.add_handler(back_to_main_menu_handler)
+
+    #ЗДЕСЬ НАЧИНАЕТСЯ АДМИНСКИЙ ИНТЕРФЕЙС
     application.add_handler(brand_manage_handler)
     application.add_handler(brand_rename_conv)
     application.add_handler(admin_menu_convhandler)
@@ -119,25 +119,18 @@ async def main() -> None:
     application.add_handler(orders_report_period_handler)
     application.add_handler(admin_decision_handler)
     application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
-    application.add_handler(nazad_to_admin_menu_handler)
-    # --- Конец регистрации обработчиков ---
+    
+    # --- Тіркеудің соңы ---
 
-    await application.initialize()
-
-    # --- Настройка веб-сервера ---
+    # --- Веб-серверді баптау ---
     async def health(_: Request) -> PlainTextResponse:
         return PlainTextResponse(content="The bot is running...")
 
     async def telegram(request: Request) -> Response:
-        # === ИЗМЕНЕНИЕ 2: ДОБАВЛЯЕМ ЛОГИРОВАНИЕ ===
-        logging.info("Received an update from Telegram.")
-        try:
-            await application.process_update(
-                await request.json()
-            )
-        except Exception as e:
-            logging.error(f"Error processing update: {e}", exc_info=True)
-
+        update_data = await request.json()
+        await application.update_queue.put(
+            Update.de_json(data=update_data, bot=application.bot)
+        )
         return Response(status_code=200)
 
     webhook_path = "/telegram"
@@ -155,13 +148,15 @@ async def main() -> None:
         )
     )
 
-    # --- Запускаем все вместе ---
+    # --- Бәрін бірге іске қосу ---
+    await application.initialize()
+    await application.bot.set_webhook(url=f"https://new-project-test.fly.dev{webhook_path}")
+    
+    # Боттың "конвейерін" және веб-серверді қатар іске қосамыз
     async with application:
-        await application.bot.set_webhook(
-            url=f"https://new-project-test.fly.dev{webhook_path}"
-        )
-        logging.info("Application started successfully! (Persistence is ON)")
+        await application.start()
         await web_server.serve()
+        await application.stop()
 
 
 if __name__ == "__main__":
