@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Inli
 from configs import BOT_TOKEN
 from telegram import Update 
 from telegram.ext import ContextTypes , PicklePersistence
-
+import asyncio
 
 
 # --- НОВЫЕ ИМПОРТЫ ДЛЯ ВЕБ-СЕРВЕРА ---
