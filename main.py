@@ -44,15 +44,24 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# Добавляем недостающую функцию для отладки
+async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query:
+        logging.info(f"⚠️ [DEBUG CALLBACK GLOBAL]: {query.data}")
+
+
 async def main() -> None:
     """Основная асинхронная функция для настройки и запуска бота."""
     
-    persistence = PicklePersistence(filepath="bot_data.pkl")
+    # === ИЗМЕНЕНИЕ 1: ВРЕМЕННО ОТКЛЮЧАЕМ PERSISTENCE ===
+    # persistence = PicklePersistence(filepath="bot_data.pkl")
     application = (
-        Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+        Application.builder().token(BOT_TOKEN).build() # Убрали .persistence(persistence)
     )
 
- 
+    # --- Регистрация всех ваших обработчиков ---
+    application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(CommandHandler("done", handle_done_command))
     application.add_handler(start_handler)
     application.add_handler(catalog_handler)
@@ -76,7 +85,6 @@ async def main() -> None:
     application.add_handler(clear_cart_handler)
     application.add_handler(payment_confirmation_handler)
     application.add_handler(checkout_handler)
-    
     application.add_handler(CallbackQueryHandler(color_photo_pagination, pattern=r"^colorphoto_\d+_\d+_\d+$"))
     application.add_handler(InlineQueryHandler(inlinequery))
     application.add_handler(CallbackQueryHandler(cancel_by_client, pattern=r"^cancel_by_client_\d+$"))
@@ -85,7 +93,6 @@ async def main() -> None:
     application.add_handler(help_handler)
     application.add_handler(reply_main_menu_handler)
     application.add_handler(back_to_main_menu_handler)
-
     application.add_handler(brand_manage_handler)
     application.add_handler(brand_rename_conv)
     application.add_handler(admin_menu_convhandler)
@@ -94,8 +101,6 @@ async def main() -> None:
         add_product_callback_handler,
         pattern=r"^(add_cat_\d+|add_cat_new|add_subcat_\d+|add_subcat_new|add_brand_\d+|add_brand_new|add_size_\d+|add_size_new|add_color_\d+|add_color_new|add_more_variants|finish_add_product)$"
     ), group=3)
-    
-
     application.add_handler(CallbackQueryHandler(update_order_status_admin, pattern=r"^status_(preparing|shipped|delivered)_\d+$"))
     application.add_handler(CallbackQueryHandler(order_history_handler, pattern="^order_history$"))
     application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"))
@@ -115,23 +120,24 @@ async def main() -> None:
     application.add_handler(admin_decision_handler)
     application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
     application.add_handler(nazad_to_admin_menu_handler)
+    # --- Конец регистрации обработчиков ---
 
-
-
-
-
-    # Инициализируем приложение бота, чтобы оно было готово обрабатывать запросы
     await application.initialize()
 
-    # --- Настройка веб-сервера Starlette ---
-    
+    # --- Настройка веб-сервера ---
     async def health(_: Request) -> PlainTextResponse:
         return PlainTextResponse(content="The bot is running...")
 
     async def telegram(request: Request) -> Response:
-        await application.process_update(
-            await request.json()
-        )
+        # === ИЗМЕНЕНИЕ 2: ДОБАВЛЯЕМ ЛОГИРОВАНИЕ ===
+        logging.info("Received an update from Telegram.")
+        try:
+            await application.process_update(
+                await request.json()
+            )
+        except Exception as e:
+            logging.error(f"Error processing update: {e}", exc_info=True)
+
         return Response(status_code=200)
 
     webhook_path = "/telegram"
@@ -154,7 +160,7 @@ async def main() -> None:
         await application.bot.set_webhook(
             url=f"https://new-project-test.fly.dev{webhook_path}"
         )
-        logging.info("Application started successfully!")
+        logging.info("Application started successfully! (Persistence is OFF)")
         await web_server.serve()
 
 
