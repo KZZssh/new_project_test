@@ -119,7 +119,7 @@ def main():
 
     port = int(os.environ.get("PORT", 8080))
     webhook_path = f"my_first_project_2006_06"
-
+    my_secret_token = "MySuperSecretPassword-For-Telegram-Only-1122"
     application.run_webhook(
         listen="0.0.0.0",
         port=port,
@@ -127,7 +127,7 @@ def main():
         # 2. Установите полный URL веб-хука для Telegram без токена
         webhook_url=f"https://new-project-test.fly.dev/{webhook_path}",
         # 3. Передайте токен бота безопасно в метод set_webhook
-        secret_token=BOT_TOKEN 
+        
     )
 
 
