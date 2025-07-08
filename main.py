@@ -40,8 +40,8 @@ async def debug_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def main():
     persistence = PicklePersistence(filepath="bot_data.pkl")
 
-    application = Application.builder().token(BOT_TOKEN).build()
-    
+    application = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+
     # Все  add_handler'ы без изменений:
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(CommandHandler("done", handle_done_command))
@@ -112,23 +112,20 @@ def main():
  
     persistence = PicklePersistence(filepath="bot_data.pkl")  # ✅ сохранение состояния
 
-    application = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+    
     # --- add_handler блок оставляем без изменений ---
 
     logging.info("Bot started. Press Ctrl+C to stop.")
 
-    # 🔁 Запуск через Webhook на сервере Fly.io
-    if os.environ.get("FLY_APP_NAME"):
-        port = int(os.environ.get("PORT", 8080))
-        app_url = f"https://new-project-test.fly.dev/{BOT_TOKEN}"
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            webhook_url=app_url
-        )
-    else:
-        # 🧪 Локальный запуск
-        application.run_polling()
+    port = int(os.environ.get("PORT", 8080))
+    app_url = f"https://new-project-test.fly.dev/{BOT_TOKEN}"
+
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        webhook_url=app_url
+    )
+        
 
 
 
