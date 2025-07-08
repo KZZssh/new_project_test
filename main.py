@@ -34,7 +34,7 @@ async def main() -> None:
     """Основная асинхронная функция для настройки и запуска бота."""
     
     # Запускаем без сохранения состояния, чтобы исключить ошибки
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token("7014521370:AAHgMni3jXKU4n0hz7l-hFXigTTvseK8yiE").build()
 
     # --- РЕГИСТРИРУЕМ ТОЛЬКО ОДИН ТЕСТОВЫЙ ОБРАБОТЧИК ---
     application.add_handler(CommandHandler("start", start_diagnostic))
