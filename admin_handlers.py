@@ -8,6 +8,9 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+import os
+import aiohttp
+from configs import FLASK_UPLOAD_URL
 from telegram.constants import ParseMode
 import logging
 import asyncio
@@ -390,49 +393,101 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = "add_variant_media"
     variant_id = context.user_data.get('admin_variant_id')
     order = context.user_data.get('media_order', 0)
-    media_count = await fetchone("SELECT COUNT(*) as cnt FROM product_media WHERE variant_id = ?", (variant_id,))
+
+    media_count = await fetchone(
+        "SELECT COUNT(*) as cnt FROM product_media WHERE variant_id = ?", (variant_id,)
+    )
     if media_count and media_count['cnt'] >= 5:
         msg = get_effective_message(update)
         await msg.reply_text("Максимум 5 фото/видео для одного варианта. Нажмите /done.")
         context.user_data["state"] = "finish_variant_media"
         return await finish_media(update, context)
+
+    BOT_TOKEN = "7014521370:AAHgMni3jXKU4n0hz7l-hFXigTTvseK8yiE"
+    
+
+    # --- PHOTO ---
     if update.message.photo:
-        file_id = update.message.photo[-1].file_id
-        await execute(
-            "INSERT INTO product_media (variant_id, file_id, is_video, \"order\") VALUES (?, ?, 0, ?)",
-            (variant_id, file_id, order)
-        )
-        context.user_data['media_order'] = order + 1
-        # --- Исправление: обновляем photo_id, если это первое медиа ---
-        if order == 0:
-            await execute(
-                "UPDATE product_variants SET photo_id = ? WHERE id = ?",
-                (file_id, variant_id)
-            )
-            msg = get_effective_message(update)
-            if msg:
-                await msg.reply_text("Фото добавлено. Отправьте ещё или напишите /done.")
+        file = update.message.photo[-1]
+        file_id = file.file_id
+        file_obj = await file.get_file()
+        tg_url = file_obj.file_path
+
+        print("📷 file_id:", file_id)
+        print("📷 file_path:", file_obj.file_path)
+        print("📷 tg_url:", tg_url)
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(tg_url) as resp:
+                if resp.status == 200:
+                    photo_bytes = await resp.read()
+                    form = aiohttp.FormData()
+                    form.add_field(
+                        "photo",
+                        photo_bytes,
+                        filename=os.path.basename(file_obj.file_path),
+                        content_type="image/jpeg"
+                    )
+                    async with session.post(FLASK_UPLOAD_URL, data=form) as upload_resp:
+                        if upload_resp.status == 200:
+                            result = await upload_resp.json()
+                            photo_url = result["url"]
+                            print("✅ Загружено:", photo_url)
+
+                            # 💾 Сохраняем в product_media
+                            await execute(
+                                "INSERT INTO product_media (variant_id, file_id, url, is_video, \"order\") VALUES (?, ?, ?, 0, ?)",
+                                (variant_id, file_id, photo_url, order)
+                            )
+                            context.user_data['media_order'] = order + 1
+
+                            # 💾 Обновляем превью, если это первое медиа
+                            if order == 0:
+                                await execute(
+                                    "UPDATE product_variants SET photo_id = ?, photo_url = ? WHERE id = ?",
+                                    (file_id, photo_url, variant_id)
+                                )
+
+                            msg = get_effective_message(update)
+                            if msg:
+                                await msg.reply_text("Фото добавлено. Отправьте ещё или напишите /done.")
+                        else:
+                            error_text = await upload_resp.text()
+                            print("❌ Ошибка от Flask сервера:", error_text)
+                            await update.message.reply_text("❌ Сервер не принял фото.")
+                else:
+                    print("❌ Не удалось скачать с Telegram:", resp.status)
+                    await update.message.reply_text("❌ Не удалось скачать фото из Telegram.")
+
+    # --- VIDEO ---
     elif update.message.video:
-        file_id = update.message.video.file_id
+        file = update.message.video
+        file_id = file.file_id
+
         await execute(
             "INSERT INTO product_media (variant_id, file_id, is_video, \"order\") VALUES (?, ?, 1, ?)",
             (variant_id, file_id, order)
         )
         context.user_data['media_order'] = order + 1
-        # --- Исправление: обновляем photo_id, если это первое медиа ---
+
         if order == 0:
             await execute(
                 "UPDATE product_variants SET photo_id = ? WHERE id = ?",
                 (file_id, variant_id)
             )
+
         msg = get_effective_message(update)
         if msg:
-            await msg.reply_text("Видео добавлено. Отправьте ещё или напишите /done.")
+            await msg.reply_text("🎥 Видео добавлено. Отправьте ещё или напишите /done.")
+
+    # --- INVALID ---
     else:
         msg = get_effective_message(update)
         if msg:
             await msg.reply_text("Пожалуйста, отправьте фото или видео. Максимум 5 медиа для одного варианта.")
+
     context.user_data["state"] = "add_variant_media"
+
     
 
 async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE):

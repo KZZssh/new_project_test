@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 # --- Импорт всех твоих обработчиков --- (оставлено без изменений)
-from new_admin import (
+from admin_handlers import (
     add_product_text_handler, add_product_callback_handler, add_product_media_handler, finish_media,
     edit_product_handler, report_handler, admin_decision_handler, cancel_dialog, cat_manage_handler,
     subcat_manage_handler, subcat_rename_conv, brand_manage_handler, brand_rename_conv,
