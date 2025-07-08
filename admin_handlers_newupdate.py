@@ -1492,12 +1492,13 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     data = query.data
 
-    
-        
-        
-        
-       
-    
+
+
+    if data == "admin_add_new_product":
+        context.user_data.clear()
+        await query.edit_message_text("Введите название товара:")
+        return ADD_GET_NAME
+
     if data == "admin_manage_categories":
         await query.edit_message_text("Управление категориями:")
         await manage_categories(update, context)
