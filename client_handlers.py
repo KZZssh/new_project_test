@@ -16,6 +16,7 @@ from datetime import datetime
 import time
 ASK_NAME, ASK_ADDRESS, ASK_PHONE = range(3)
 import telegram.error
+import logging
 
 def md2(text):
     """
@@ -1336,32 +1337,17 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     return msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    t = "Добро пожаловть !"
-    await update.message.reply_text(
-        text=t,
-        reply_markup=kb,
-        parse_mode=ParseMode.HTML
+    # === ДОБАВЬТЕ ЭТУ СТРОЧКУ В САМОЕ НАЧАЛО ФУНКЦИИ ===
+    logging.info(f"--- Handler 'start' was called by user {update.effective_user.id} ---")
+    
+    # ... здесь идет остальной ваш код для команды /start ...
+    # Например:
+    user = update.effective_user
+    await update.message.reply_html(
+        rf"Привет, {user.mention_html()}! Я бот.",
+        # ...
     )
-
-    args = context.args
-    try:
-        await update.message.delete()
-        
-
-    except Exception as e:
-        print("Не удалось удалить /start:", e)
-
-    # Если был передан параметр ?start=prod_123
-    if args and args[0].startswith("prod_"):
-        product_id = int(args[0].split("_")[1])
-        context.user_data['current_product_id'] = product_id
-
-        # Показываем детали товара
-        await show_product_details(update, context)
-        return
-
-    # Иначе просто показываем меню
-    await show_reply_main_menu(update, context)
+    logging.info(f"--- Handler 'start' finished for user {update.effective_user.id} ---") # <-- И эту в коне
 
 
 
