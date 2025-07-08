@@ -4,7 +4,6 @@ import os
 FLASK_UPLOAD_URL = os.getenv("FLASK_UPLOAD_URL", "https://flask-media-server.fly.dev/upload")
 
 
-
 # Берем токен из "секретов" Fly.io (переменных окружения)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
