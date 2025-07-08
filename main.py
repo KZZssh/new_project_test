@@ -120,7 +120,7 @@ def main():
     # 🔁 Запуск через Webhook на сервере Fly.io
     if os.environ.get("FLY_APP_NAME"):
         port = int(os.environ.get("PORT", 8080))
-        app_url = f"https://{os.environ['FLY_APP_NAME']}.fly.dev"
+        app_url = f"https://new-project-test.fly.dev/{BOT_TOKEN}"
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
