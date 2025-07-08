@@ -146,11 +146,16 @@ async def get_new_category_name(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def ask_for_subcategory(update, context):
     context.user_data["state"] = "choose_subcategory"
-    category_id = context.user_data['new_product_category_id']
+    category_id = context.user_data.get('new_product_category_id')
     sub_categories = await fetchall("SELECT * FROM sub_categories WHERE category_id = ?", (category_id,))
     keyboard = [[InlineKeyboardButton(scat['name'], callback_data=f"add_subcat_{scat['id']}")] for scat in sub_categories]
     keyboard.append([InlineKeyboardButton("➕ Создать подкатегорию", callback_data="add_subcat_new")])
     message_text = ("Шаг 2: Выберите подкатегорию:")
+    if not category_id:
+        msg = get_effective_message(update)
+        if msg:
+            await msg.reply_text("❌ Ошибка: категория не выбрана. Вернитесь на шаг выбора категории.")
+        return
     if getattr(update, 'callback_query', None):
         await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else:
@@ -180,11 +185,17 @@ async def get_subcategory(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_new_subcategory_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = "get_new_subcategory_name"
-    category_id = context.user_data['new_product_category_id']
+
+    category_id = context.user_data.get("new_product_category_id")
+    if not category_id:
+        await update.message.reply_text("❌ Ошибка: категория не выбрана. Пожалуйста, сначала выберите основную категорию.")
+        return
+
     subcat_id = await create_new_entity(update, context, 'sub_categories', update.message.text, category_id=category_id)
     context.user_data['new_product_sub_category_id'] = subcat_id
     context.user_data["state"] = "choose_brand"
     await ask_for_brand(update, context)
+
 
 async def ask_for_brand(update, context):
     context.user_data["state"] = "choose_brand"
