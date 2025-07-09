@@ -10,6 +10,9 @@ COPY requirements.txt .
 # Установка зависимостей
 RUN pip install --no-cache-dir -r requirements.txt
 
+
+RUN apt-get update && apt-get install -y sqlite3
+
 # Копируем весь код проекта
 COPY . .
 
