@@ -62,6 +62,30 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
      # АДМИНСКИЙ ИНТЕРФЕЙС
     application.add_handler(add_product_conv)
+    application.add_handler(brand_manage_handler)
+    application.add_handler(brand_rename_conv)
+    application.add_handler(admin_conv)
+
+   
+    
+    application.add_handler(CallbackQueryHandler(update_order_status_admin, pattern=r"^status_(preparing|shipped|delivered)_\d+$"))
+    application.add_handler(CallbackQueryHandler(order_history_handler, pattern="^order_history$"))
+    application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"))
+    application.add_handler(CallbackQueryHandler(pagination_handler, pattern="^page_"))
+    application.add_handler(CallbackQueryHandler(cancel_from_history_handler, pattern="^cancel_from_history_"))
+    application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"))
+    application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"))
+    application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"))
+    
+    
+    application.add_handler(cat_manage_handler)
+    application.add_handler(subcat_manage_handler)
+    application.add_handler(subcat_rename_conv)
+    application.add_handler(report_handler)
+    application.add_handler(orders_report_handler)
+    application.add_handler(orders_report_period_handler)
+    application.add_handler(admin_decision_handler)
+    application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
     
     
     application.add_handler(start_handler)
@@ -94,30 +118,7 @@ async def main() -> None:
     application.add_handler(help_handler)
     application.add_handler(reply_main_menu_handler)
     application.add_handler(back_to_main_menu_handler)
-    application.add_handler(brand_manage_handler)
-    application.add_handler(brand_rename_conv)
-    application.add_handler(admin_conv)
-
-   
     
-    application.add_handler(CallbackQueryHandler(update_order_status_admin, pattern=r"^status_(preparing|shipped|delivered)_\d+$"))
-    application.add_handler(CallbackQueryHandler(order_history_handler, pattern="^order_history$"))
-    application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"))
-    application.add_handler(CallbackQueryHandler(pagination_handler, pattern="^page_"))
-    application.add_handler(CallbackQueryHandler(cancel_from_history_handler, pattern="^cancel_from_history_"))
-    application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"))
-    application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"))
-    application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"))
-    
-    
-    application.add_handler(cat_manage_handler)
-    application.add_handler(subcat_manage_handler)
-    application.add_handler(subcat_rename_conv)
-    application.add_handler(report_handler)
-    application.add_handler(orders_report_handler)
-    application.add_handler(orders_report_period_handler)
-    application.add_handler(admin_decision_handler)
-    application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
     
     # --- Тіркеудің соңы ---
 

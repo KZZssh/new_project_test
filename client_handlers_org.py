@@ -824,7 +824,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data['cart'] = {}  # безопаснее, чем pop()
-    await safe_edit_or_send(query, "🛒 Ваша корзина очищена.", context)
+    await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена."), context)
 
 
 async def cart_plus(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -898,7 +898,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
         await query.message.chat.send_message("✅ Добавлено в корзину!")
 
         # Через паузу — возвращаемся к слайдеру
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.8)
         await back_to_slider(update, context)
 
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
