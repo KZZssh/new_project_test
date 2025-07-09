@@ -395,7 +395,11 @@ async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == 'finish_add_product':
         product_name = context.user_data.get('product_name', 'товар')
         await query.edit_message_text(f"✅ Отлично! Все варианты для товара '{product_name}' сохранены.")
+        if context.user_data.get("mode") == "edit":
+            await show_edit_menu(update, context)
+            return EDIT_AWAIT_ACTION
         context.user_data.clear()
+        
         return ConversationHandler.END
 
 # =================================================================
@@ -1667,7 +1671,7 @@ admin_conv = ConversationHandler(
         # Состояния для добавления медиа во время редактирования
         EDIT_ADD_VARIANT_MEDIA: [
             MessageHandler(filters.PHOTO | filters.VIDEO, add_media),
-            CommandHandler('done', show_edit_menu) # После /done возвращаемся в меню
+            CommandHandler('done', finish_media) 
         ],
         # Состояния для добавления нового варианта ВНУТРИ редактирования
         EDIT_ADD_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern="^size_")],

@@ -824,7 +824,7 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data['cart'] = {}  # безопаснее, чем pop()
-    kb = ([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")])
+    kb = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")]]
     await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена."), context , reply_markup=InlineKeyboardMarkup(kb))
 
 
