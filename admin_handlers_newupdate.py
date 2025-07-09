@@ -40,8 +40,7 @@ def get_effective_message(update):
     EDIT_GET_NEW_SIZE_NAME, EDIT_GET_NEW_COLOR_NAME,
     EDIT_ASK_ADD_MORE,
 
-    # === Состояния для Админ-панели ===
-    ADMIN_MENU_AWAIT, ADMIN_EDIT_AWAIT_ID, ADMIN_SUBCAT_AWAIT_ID,
+    
     
     # === Состояния для переименования (остаются как есть) ===
     RENAME_SUBCAT, RENAME_BRAND
@@ -213,6 +212,8 @@ async def get_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ADD_GET_NEW_SIZE_NAME
     context.user_data['variant_size_id'] = int(query.data.split('_')[1])
     await ask_for_variant_color(update, context)
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_COLOR
     return ADD_GET_VARIANT_COLOR
 
 async def get_new_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -220,6 +221,8 @@ async def get_new_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data['variant_size_id'] = size_id
     await update.message.reply_text(f"Размер '{update.message.text}' создан.")
     await ask_for_variant_color(update, context)
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_COLOR
     return ADD_GET_VARIANT_COLOR
 
 async def ask_for_variant_color(update, context):
@@ -237,24 +240,35 @@ async def get_variant_color(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     if query.data == "color_new":
         await query.edit_message_text("Введите название нового цвета:")
-        return ADD_GET_NEW_COLOR_NAME
+        if context.user_data.get("mode") == "edit":
+            return EDIT_GET_NEW_COLOR_NAME
+        else:
+            return ADD_GET_NEW_COLOR_NAME
     context.user_data['variant_color_id'] = int(query.data.split('_')[1])
     await query.edit_message_text("Шаг 3: Введите цену этого варианта (только число):")
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_PRICE
     return ADD_GET_VARIANT_PRICE
 
 async def get_new_color_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     color_id = await create_new_entity(update.message.text, 'colors')
     context.user_data['variant_color_id'] = color_id
     await update.message.reply_text(f"Цвет '{update.message.text}' создан.\n\nШаг 3: Введите цену этого варианта:")
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_PRICE
     return ADD_GET_VARIANT_PRICE
 
 async def get_variant_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         context.user_data['variant_price'] = float(update.message.text)
         await update.message.reply_text("Шаг 4: Введите количество на складе:")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_QUANTITY
         return ADD_GET_VARIANT_QUANTITY
     except ValueError:
         await update.message.reply_text("Неверный формат. Введите цену числом.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_PRICE
         return ADD_GET_VARIANT_PRICE
 
 async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -273,9 +287,14 @@ async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['current_variant_id'] = variant_row['id']
         context.user_data['media_order'] = 0
         await update.message.reply_text("Вариант сохранен. Теперь отправьте от 1 до 5 фото/видео для этого варианта. Когда закончите, напишите /done.")
-        return ADD_GET_VARIANT_MEDIA
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_MEDIA
+        else:
+            return ADD_GET_VARIANT_MEDIA
     except ValueError:
         await update.message.reply_text("Неверный формат. Введите количество как целое число.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_QUANTITY
         return ADD_GET_VARIANT_QUANTITY
 
 # ВАША ФУНКЦИЯ add_media БЕЗ ИЗМЕНЕНИЙ
@@ -285,6 +304,8 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if order >= 5:
         await update.message.reply_text("Максимум 5 медиафайлов для одного варианта. Напишите /done.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_MEDIA
         return ADD_GET_VARIANT_MEDIA
 
     file_id = None
@@ -341,6 +362,10 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                     await update.message.reply_text("❌ Не удалось скачать файл из Telegram.")
     else:
         await update.message.reply_text("Отправьте только фото или видео.")
+
+
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_MEDIA
         
     return ADD_GET_VARIANT_MEDIA
 
@@ -353,6 +378,8 @@ async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         "✅ Вариант успешно добавлен. Хотите добавить еще один?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ASK_ADD_MORE
     return ADD_ASK_ADD_MORE_VARIANTS
 
 async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -361,7 +388,10 @@ async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TY
     if query.data == 'add_more_variants':
         await query.edit_message_text("Добавление нового варианта...")
         await ask_for_variant_size(update, context)
-        return ADD_GET_VARIANT_SIZE
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_SIZE
+        else:
+            return ADD_GET_VARIANT_SIZE
     elif query.data == 'finish_add_product':
         product_name = context.user_data.get('product_name', 'товар')
         await query.edit_message_text(f"✅ Отлично! Все варианты для товара '{product_name}' сохранены.")
@@ -1537,6 +1567,7 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif data.startswith("add_variant_to_"):
         context.user_data['product_id'] = int(data.split('_')[3])
+        context.user_data["mode"] = "edit"
         await query.edit_message_text("Добавление нового варианта к существующему товару...")
         await ask_for_variant_size(update, context)
         return EDIT_ADD_VARIANT_SIZE
@@ -1645,7 +1676,9 @@ admin_conv = ConversationHandler(
         EDIT_GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
         EDIT_ADD_VARIANT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price)],
         EDIT_ADD_VARIANT_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity)],
-    
+        EDIT_ASK_ADD_MORE: [
+            CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")
+        ],
         ADMIN_AWAIT_SUBCAT_ID: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id)
         ],

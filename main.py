@@ -60,6 +60,7 @@ async def main() -> None:
 
     # --- Барлық обработчиктерді тіркеу ---
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
+    application.add_handler(start_handler)
      # АДМИНСКИЙ ИНТЕРФЕЙС
     application.add_handler(add_product_conv)
     application.add_handler(brand_manage_handler)
@@ -88,7 +89,7 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
     
     
-    application.add_handler(start_handler)
+    
     application.add_handler(catalog_handler)
     application.add_handler(reply_cart_handler)
     application.add_handler(subcategories_handler)

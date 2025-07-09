@@ -104,7 +104,7 @@ async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     categories = await fetchall("SELECT * FROM categories")
     keyboard = [[InlineKeyboardButton(md2(cat['name']), callback_data=f"cat_{cat['id']}")] for cat in categories]
     # Кнопка "Назад в главное меню"
-    keyboard.append([InlineKeyboardButton(md2("◀ Главная меню"), callback_data="back_to_main_menu")])
+    keyboard.append([InlineKeyboardButton(md2("◀ Главное меню"), callback_data="back_to_main_menu")])
 
     text = md2("Выберите категорию:")
 
@@ -824,7 +824,8 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data['cart'] = {}  # безопаснее, чем pop()
-    await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена."), context)
+    kb = ([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")])
+    await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена."), context , reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def cart_plus(update: Update, context: ContextTypes.DEFAULT_TYPE):
