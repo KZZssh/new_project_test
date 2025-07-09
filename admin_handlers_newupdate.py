@@ -209,6 +209,8 @@ async def get_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await query.answer()
     if query.data == "size_new":
         await query.edit_message_text("Введите новое значение размера:")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_GET_NEW_SIZE_NAME
         return ADD_GET_NEW_SIZE_NAME
     context.user_data['variant_size_id'] = int(query.data.split('_')[1])
     await ask_for_variant_color(update, context)
