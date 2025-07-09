@@ -7,8 +7,9 @@ from google.oauth2.service_account import Credentials
 import json
 import requests
 from pathlib import Path
+from configs import DB_FILE
 
-DB_FILE = Path("shop.db")  # ✅ просто в корне проекта
+DB_FILE = DB_FILE  # ✅ просто в корне проекта
 SERVICE_ACCOUNT_FILE = Path("credentials.json")
 SPREADSHEET_NAME = "UserData"
 SHEET_NAME = "отчет по товарам"

@@ -39,3 +39,8 @@ primary_region = "fra"
     protocol = "http"
     timeout = "10s"
     tls_skip_verify = true
+
+
+[mounts]
+  source="bot_data"
+  destination="/data"
