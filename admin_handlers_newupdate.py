@@ -1557,7 +1557,7 @@ async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     context.user_data['product_to_edit_id'] = int(product_id)
     await show_edit_menu(update, context)
-    return EDIT_AWAIT_ACTION
+    return ConversationHandler.END
 
 async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category_id = update.message.text.strip()
