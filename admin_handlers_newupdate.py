@@ -1490,7 +1490,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # Эти команды переводят диалог в новое состояние
     elif data == "admin_edit_product":
-            context.user_data.get('mode') = "edit"
+            context.user_data["mode"] = "edit"
             await query.edit_message_text("Введите ID товара для редактирования:")
             return ADMIN_AWAIT_EDIT_ID
             
@@ -1574,7 +1574,7 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif data.startswith("add_variant_to_"):
         context.user_data['product_id'] = int(data.split('_')[3])
-        context.user_data.get("mode") = "edit"
+        context.user_data["mode"] = "edit"
         await query.edit_message_text("Добавление нового варианта к существующему товару...")
         await ask_for_variant_size(update, context)
         return EDIT_ADD_VARIANT_SIZE
