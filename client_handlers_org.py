@@ -556,9 +556,9 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE pv.product_id = ? AND pv.color_id = ? AND pv.quantity > 0
     """, (product_id, color_id))
     size_keyboard = [
-        [InlineKeyboardButton(md2(s['name']), callback_data=f"size_{product_id}_{color_id}_{s['id']}")] for s in sizes
+        [InlineKeyboardButton(s['name'], callback_data=f"size_{product_id}_{color_id}_{s['id']}")] for s in sizes
     ]
-    size_keyboard.append([InlineKeyboardButton(md2("◀️ К цветам"), callback_data=f"details_{product_id}")])
+    size_keyboard.append([InlineKeyboardButton("◀️ К цветам", callback_data=f"details_{product_id}")])
 
     # --- Кнопки пагинации медиа ---
     nav_buttons = []
@@ -571,8 +571,8 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [nav_buttons] if nav_buttons else []
     keyboard += size_keyboard
 
-    text = md2(f"*Фото {page+1} из {total_media}*" if total_media > 0 else "*Нет медиа для выбранного цвета*")
-    text += "\n\n" + md2("Выберите размер:")
+    text = f"<b>Фото {page+1} из {total_media}</b>" if total_media > 0 else "*Нет медиа для выбранного цвета*"
+    text += "\n\n" + "Выберите размер:"
 
     # --- Отправляем медиа или просто текст с кнопками ---
     if not file_id:
@@ -584,12 +584,12 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if is_video:
             await query.message.edit_media(
-                media=InputMediaVideo(file_id, caption=text, parse_mode="MarkdownV2"),
+                media=InputMediaVideo(file_id, caption=text, parse_mode="HTML"),
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         else:
             await query.message.edit_media(
-                media=InputMediaPhoto(file_id, caption=text, parse_mode="MarkdownV2"),
+                media=InputMediaPhoto(file_id, caption=text, parse_mode="HTML"),
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
     except Exception:
@@ -602,13 +602,13 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.chat.send_video(
                 video=file_id,
                 caption=text,
-                parse_mode="MarkdownV2",
+                parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         else:
             try:
                 await query.message.edit_media(
-                    media=InputMediaPhoto(file_id, caption=text, parse_mode="MarkdownV2"),
+                    media=InputMediaPhoto(file_id, caption=text, parse_mode="HTML"),
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             except Exception:
@@ -619,7 +619,7 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.chat.send_photo(
                 photo=file_id,
                 caption=text,
-                parse_mode="MarkdownV2",
+                parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
     context.user_data['color_photo_page'] = page
