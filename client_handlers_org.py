@@ -1337,6 +1337,12 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     return msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = "Добро пожаловать в наш магазин!"
+    await update.message.reply_text(
+        text,
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML
+    )
     args = context.args
     try:
         await update.message.delete()  # ← удаляет сообщение с /start

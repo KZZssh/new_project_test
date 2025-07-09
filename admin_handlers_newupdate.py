@@ -26,6 +26,11 @@ def get_effective_message(update):
     ADD_GET_VARIANT_SIZE, ADD_GET_VARIANT_COLOR, ADD_GET_VARIANT_PRICE, ADD_GET_VARIANT_QUANTITY, ADD_GET_VARIANT_MEDIA,
     ADD_GET_NEW_SIZE_NAME, ADD_GET_NEW_COLOR_NAME,
     ADD_ASK_ADD_MORE_VARIANTS,
+
+    # === Состояния для ЕДИНОГО АДМИНСКОГО ХЕНДЛЕРА ===
+    ADMIN_MENU_AWAIT,           # Ожидание выбора в главном админ-меню
+    ADMIN_AWAIT_EDIT_ID,        # Ожидание ввода ID товара для редактирования
+    ADMIN_AWAIT_SUBCAT_ID,     # Ожидание ввода ID категории для подкатегорий
     
     # === Состояния для РЕДАКТИРОВАНИЯ товара ===
     EDIT_AWAIT_ACTION, 
@@ -41,7 +46,7 @@ def get_effective_message(update):
     # === Состояния для переименования (остаются как есть) ===
     RENAME_SUBCAT, RENAME_BRAND
 
-) = range(500, 534)
+) = range(500, 537)
 
 # --- Вспомогательные функции (без изменений) ---
 
@@ -425,6 +430,11 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     data = query.data
+
+    if data == "back_to_admin_menu":
+        await query.edit_message_text("Возврат в главное меню...")
+        await admin_menu_entry(query, context) # Переиспользуем функцию входа
+        return ADMIN_MENU_AWAIT
 
     if data.startswith("delete_variant_"):
         context.user_data['variant_to_delete'] = int(data.split('_')[2])
@@ -1479,76 +1489,75 @@ def admin_menu_keyboard():
         [InlineKeyboardButton("📦 Отчёт по заказам", callback_data="admin_orders_report")],
     ])
 
-async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Входная точка для всей админ-панели."""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("Нет доступа.", parse_mode="HTML")
+        await update.message.reply_text("Нет доступа.")
         return ConversationHandler.END
+    
     await update.message.reply_text(
         "⚙️ <b>Админ-панель. Выберите действие:</b>",
         reply_markup=admin_menu_keyboard(),
-        parse_mode="HTML"
+        parse_mode=ParseMode.HTML
     )
     return ADMIN_MENU_AWAIT
 
-
-async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает нажатия в главном меню админки."""
     query = update.callback_query
     await query.answer()
     data = query.data
 
+    # Эти команды не меняют состояние, а просто выполняют действие и выходят из диалога
+    if data in ["admin_manage_categories", "admin_manage_brands", "admin_report", "admin_orders_report"]:
+        if data == "admin_manage_categories":
+            await query.edit_message_text("Управление категориями:")
+            await manage_categories(update, context) # Предполагается, что эта функция существует
+        # ... (здесь другие elif для брендов, отчетов) ...
+        elif data == "admin_manage_subcategories":
+            await query.edit_message_text("Введите ID категории для управления подкатегориями:")
+            return ADMIN_SUBCAT_AWAIT_ID
 
+        elif data == "admin_manage_brands":
+            await query.edit_message_text("Управление брендами:")
+            await manage_brands(update, context)
+            return ConversationHandler.END  # <----- обязательно!
 
-    if data == "admin_add_new_product":
-        return ConversationHandler.END  
+        elif data == "admin_report":
+            await query.edit_message_text(f"Формирую отчёт... \nПожалуйста подождите 10-20 секунд.")
+            await report_combined(update, context)
+            return ConversationHandler.END  # <----- обязательно!
 
-    if data == "admin_manage_categories":
-        await query.edit_message_text("Управление категориями:")
-        await manage_categories(update, context)
-        return ConversationHandler.END  # <----- обязательно!
+        elif data == "admin_orders_report":
+            await query.edit_message_text("Формирую отчёт по заказам...")
+            await ask_orders_report_period(update, context)
+            return ConversationHandler.END  # <----- обязательно!
 
-    elif data == "admin_manage_subcategories":
-        await query.edit_message_text("Введите ID категории для управления подкатегориями:")
-        return ADMIN_SUBCAT_AWAIT_ID
-
-    elif data == "admin_manage_brands":
-        await query.edit_message_text("Управление брендами:")
-        await manage_brands(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_report":
-        await query.edit_message_text(f"Формирую отчёт... \nПожалуйста подождите 10-20 секунд.")
-        await report_combined(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_orders_report":
-        await query.edit_message_text("Формирую отчёт по заказам...")
-        await ask_orders_report_period(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_edit_product":
-        await query.edit_message_text("Введите ID товара для редактирования:")
-        return ADMIN_EDIT_AWAIT_ID
-
-    else:
-        await query.edit_message_text("Неизвестная команда.")
         return ConversationHandler.END
 
+    # Эти команды переводят диалог в новое состояние
+    elif data == "admin_edit_product":
+        await query.edit_message_text("Введите ID товара для редактирования:")
+        return ADMIN_AWAIT_EDIT_ID
+        
+    elif data == "admin_manage_subcategories":
+        await query.edit_message_text("Введите ID категории для управления подкатегориями:")
+        return ADMIN_AWAIT_SUBCAT_ID
 
-async def admin_edit_await_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return ADMIN_MENU_AWAIT
+
+async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получает ID товара и переходит в меню редактирования."""
     product_id = update.message.text.strip()
-    msg = get_effective_message(update)
     if not product_id.isdigit():
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Некорректный ID товара, попробуйте ещё раз или /cancel для отмены.")
-        return ADMIN_EDIT_AWAIT_ID
-    context.user_data['product_to_edit_id'] = int(product_id)
+        await update.message.reply_text("Некорректный ID. Попробуйте ещё раз.")
+        return ADMIN_AWAIT_EDIT_ID
     
-    await update.message.reply_text(
-    "ID товара сохранён. Нажмите кнопку ниже для перехода к редактированию.",
-    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✏️ Редактировать товар", callback_data="admin_edit_product")]])
-)
-    return ConversationHandler.END
+    context.user_data['product_to_edit_id'] = int(product_id)
+    await show_edit_menu(update, context)
+    return EDIT_AWAIT_ACTION
 
 async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category_id = update.message.text.strip()
@@ -1636,27 +1645,56 @@ edit_product_conv = ConversationHandler(
 )
 
 
-# ... (Остальной код, который вы не предоставили, но который должен быть здесь) ...
-admin_menu_convhandler = ConversationHandler(
+# ЕДИНЫЙ обработчик для всей админ-панели и редактирования
+admin_conv = ConversationHandler(
     entry_points=[CommandHandler("admin", admin_menu_entry)],
     states={
         ADMIN_MENU_AWAIT: [
-            CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_"),
+            CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_")
         ],
-        ADMIN_EDIT_AWAIT_ID: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_await_id),
+        ADMIN_AWAIT_EDIT_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_await_edit_id)
         ],
-        ADMIN_SUBCAT_AWAIT_ID: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id),
+        EDIT_AWAIT_ACTION: [
+            CallbackQueryHandler(handle_edit_action)
+        ],
+        EDIT_CONFIRM_DELETE_VARIANT: [
+            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
+        ],
+
+        EDIT_CONFIRM_DELETE_VARIANT: [
+            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
+        ],
+        EDIT_CONFIRM_DELETE_FULL_PRODUCT: [
+            CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
+        ],
+        EDIT_SELECT_VARIANT_FIELD: [
+            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_|^back_to_edit_menu$")
+        ],
+        EDIT_GET_NEW_VARIANT_VALUE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_variant_value)
+        ],
+        # Состояния для добавления медиа во время редактирования
+        EDIT_ADD_VARIANT_MEDIA: [
+            MessageHandler(filters.PHOTO | filters.VIDEO, add_media),
+            CommandHandler('done', show_edit_menu) # После /done возвращаемся в меню
+        ],
+        # Состояния для добавления нового варианта ВНУТРИ редактирования
+        EDIT_ADD_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern="^size_")],
+        EDIT_GET_NEW_SIZE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name)],
+        EDIT_ADD_VARIANT_COLOR: [CallbackQueryHandler(get_variant_color, pattern="^color_")],
+        EDIT_GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
+        EDIT_ADD_VARIANT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price)],
+        EDIT_ADD_VARIANT_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity)],
+    
+        ADMIN_AWAIT_SUBCAT_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id)
         ],
     },
-    fallbacks=[
-        MessageHandler(filters.COMMAND, cancel_dialog),
-        CallbackQueryHandler(cancel_dialog, pattern="^cancel_dialog$")
-    ],
-    per_user=True,
-    per_chat=True,
+    fallbacks=[CommandHandler("cancel", cancel_dialog)],
+    persistent=True, name="admin_panel_conversation"
 )
+
 
 subcat_rename_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_rename_subcat, pattern=r"^subcat_rename_\d+$")],
