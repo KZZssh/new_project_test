@@ -430,10 +430,12 @@ async def confirm_full_product_delete(update: Update, context: ContextTypes.DEFA
         await execute("DELETE FROM product_variants WHERE product_id = ?", (product_id,))
         await execute("DELETE FROM products WHERE id = ?", (product_id,))
         await query.edit_message_text(f"✅ Товар с ID {product_id} и все его варианты были полностью удалены.")
+        
         context.user_data.clear()
         return ConversationHandler.END
     else: # cancel_delete
         await query.edit_message_text("Удаление отменено.")
+        await asyncio.sleep(1)
         await show_edit_menu(update, context)
         return EDIT_AWAIT_ACTION
 
@@ -1464,7 +1466,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if data == "admin_manage_categories":
             await query.edit_message_text("Управление категориями:")
             await manage_categories(update, context) # Предполагается, что эта функция существует
-        # ... (здесь другие elif для брендов, отчетов) ...
+        
         elif data == "admin_manage_subcategories":
             await query.edit_message_text("Введите ID категории для управления подкатегориями:")
             return ADMIN_SUBCAT_AWAIT_ID
@@ -1488,6 +1490,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # Эти команды переводят диалог в новое состояние
     elif data == "admin_edit_product":
+            context.user_data.get('mode') = "edit"
             await query.edit_message_text("Введите ID товара для редактирования:")
             return ADMIN_AWAIT_EDIT_ID
             
@@ -1571,7 +1574,7 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif data.startswith("add_variant_to_"):
         context.user_data['product_id'] = int(data.split('_')[3])
-        context.user_data["mode"] = "edit"
+        context.user_data.get("mode") = "edit"
         await query.edit_message_text("Добавление нового варианта к существующему товару...")
         await ask_for_variant_size(update, context)
         return EDIT_ADD_VARIANT_SIZE
