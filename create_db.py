@@ -1,7 +1,12 @@
 import sqlite3
 import pathlib
+import os
 
-DB_FILE = pathlib.Path(__file__).parent.joinpath("shop.db")
+# --- ИСПРАВЛЕНО: Путь к базе данных на постоянном диске ---
+# Убеждаемся, что папка /data существует (на сервере Fly.io она будет)
+os.makedirs("/data", exist_ok=True) 
+DB_FILE = "/data/shop.db"
+
 connection = sqlite3.connect(DB_FILE)
 cursor = connection.cursor()
 print("Начинаю полную перестройку базы данных...")

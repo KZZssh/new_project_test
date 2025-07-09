@@ -17,5 +17,6 @@ if not BOT_TOKEN:
 
 
 ADMIN_IDS = [7955438947]           # Список id админов
-DB_FILE = pathlib.Path(__file__).parent.joinpath("shop.db")
+# Указываем путь к базе данных ВНУТРИ постоянного диска (volume)
+DB_FILE = "/data/shop.db" # Путь к базе данных, которая будет храниться на постоянном диске Fly.io
 ITEMS_PER_PAGE = 5
