@@ -1395,12 +1395,14 @@ def admin_menu_keyboard():
 
 
 async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
     """Входная точка для всей админ-панели."""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("Нет доступа.")
         return ConversationHandler.END
-    
-    await update.message.reply_text(
+
+    await query.edit_message_text(
         "⚙️ <b>Админ-панель. Выберите действие:</b>",
         reply_markup=admin_menu_keyboard(),
         parse_mode=ParseMode.HTML
