@@ -476,17 +476,17 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
         await safe_edit_or_send(update, md2("Нет доступных цветов для этого товара."), context=context)
         return
 
-    text = f"*{md2(product['name'])}*\n\n{md2(product['description'])}\n\nВыберите цвет:"
+    text = f"<b>{product['name']}</b>\n\n<i>{product['description']}</i>\n\nВыберите цвет:"
 
     keyboard = [
-        [InlineKeyboardButton(md2(c['name']), callback_data=f"color_{product_id}_{c['id']}")] for c in colors
+        [InlineKeyboardButton(f"{c['name']}", callback_data=f"color_{product_id}_{c['id']}")] for c in colors
     ]
-    keyboard.append([InlineKeyboardButton(md2("◀️ К товарам"), callback_data="back_to_slider")])
+    keyboard.append([InlineKeyboardButton("◀️ К товарам", callback_data="back_to_slider")])
 
     if query:
-        await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2", context=context)
+        await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
     else:
-        await message_target.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
+        await message_target.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
 
 async def get_color_media(product_id, color_id):

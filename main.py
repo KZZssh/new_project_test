@@ -62,10 +62,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(start_handler)
      # АДМИНСКИЙ ИНТЕРФЕЙС
-    application.add_handler(add_product_conv)
-    application.add_handler(brand_manage_handler)
-    application.add_handler(brand_rename_conv)
-    application.add_handler(admin_conv)
+    
 
    
     
@@ -77,7 +74,10 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"))
     application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"))
     application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"))
-    
+    application.add_handler(add_product_conv)
+    application.add_handler(brand_manage_handler)
+    application.add_handler(brand_rename_conv)
+    application.add_handler(admin_conv)
     
     application.add_handler(cat_manage_handler)
     application.add_handler(subcat_manage_handler)
