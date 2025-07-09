@@ -386,91 +386,6 @@ async def start_edit_product(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await show_edit_menu(update, context)
     return EDIT_AWAIT_ACTION
 
-async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает главное меню редактирования с вариантами."""
-    product_id = context.user_data.get('product_to_edit_id')
-    product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
-    if not product:
-        # Используем update.effective_message, чтобы работать и с кнопками, и с сообщениями
-        await update.effective_message.reply_text(f"❌ Товар с ID {product_id} не найден.")
-        return
-
-    variants = await fetchall("""
-        SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
-        FROM product_variants pv
-        LEFT JOIN sizes s ON pv.size_id = s.id
-        LEFT JOIN colors c ON pv.color_id = c.id
-        WHERE pv.product_id = ?
-    """, (product_id,))
-
-    message_text = f"⚙️ Редактирование <b>{product['name']}</b> (ID: {product_id})\n\nВыберите действие:"
-    keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
-    
-    if variants:
-        keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
-        for v in variants:
-            v_text = f"{v['size_name']}, {v['color_name']} | {v['price']}₸ ({v['quantity']} шт.)"
-            keyboard.append([
-                InlineKeyboardButton(v_text, callback_data=f"edit_variant_menu_{v['id']}"),
-                InlineKeyboardButton("🗑️", callback_data=f"delete_variant_{v['id']}")
-            ])
-
-    keyboard.append([InlineKeyboardButton("➕ Добавить новый вариант", callback_data=f"add_variant_to_{product_id}")])
-    keyboard.append([InlineKeyboardButton("❌ Удалить товар ПОЛНОСТЬЮ", callback_data=f"delete_product_full_{product_id}")])
-    keyboard.append([InlineKeyboardButton("⬅️ Завершить", callback_data="edit_cancel")])
-
-    if update.callback_query:
-        await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    else:
-        await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    
-
-async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обрабатывает нажатия в главном меню редактирования."""
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-
-    if data == "back_to_admin_menu":
-        await query.edit_message_text("Возврат в главное меню...")
-        await admin_menu_entry(query, context) # Переиспользуем функцию входа
-        return ADMIN_MENU_AWAIT
-
-    if data.startswith("delete_variant_"):
-        context.user_data['variant_to_delete'] = int(data.split('_')[2])
-        keyboard = [[InlineKeyboardButton("✅ Да, удалить вариант", callback_data="confirm_delete_variant"), InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]]
-        await query.edit_message_text("Вы уверены?", reply_markup=InlineKeyboardMarkup(keyboard))
-        return EDIT_CONFIRM_DELETE_VARIANT
-
-    elif data.startswith("delete_product_full_"):
-        context.user_data['product_to_delete'] = int(data.split('_')[3])
-        keyboard = [[InlineKeyboardButton("✅ Да, удалить ВСЁ", callback_data="confirm_delete_full"), InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]]
-        await query.edit_message_text("Вы уверены, что хотите удалить товар и ВСЕ его варианты?", reply_markup=InlineKeyboardMarkup(keyboard))
-        return EDIT_CONFIRM_DELETE_FULL_PRODUCT
-
-    elif data.startswith("add_variant_to_"):
-        context.user_data['product_id'] = int(data.split('_')[3])
-        await query.edit_message_text("Добавление нового варианта к существующему товару...")
-        await ask_for_variant_size(update, context) # Переиспользуем функцию, но она вернет правильное состояние
-        return EDIT_ADD_VARIANT_SIZE
-
-    elif data.startswith("edit_variant_menu_"):
-        context.user_data['variant_to_edit_id'] = int(data.split('_')[3])
-        keyboard = [
-            [InlineKeyboardButton("Цену", callback_data="edit_field_price")],
-            [InlineKeyboardButton("Количество", callback_data="edit_field_quantity")],
-            [InlineKeyboardButton("Фото", callback_data="edit_field_photo")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_edit_menu")]
-        ]
-        await query.edit_message_text("Что изменить в этом варианте?", reply_markup=InlineKeyboardMarkup(keyboard))
-        return EDIT_SELECT_VARIANT_FIELD
-
-    elif data == "edit_cancel":
-        context.user_data.clear()
-        await query.edit_message_text("Редактирование завершено.")
-        return ConversationHandler.END
-    
-    return EDIT_AWAIT_ACTION # Остаемся в том же состоянии
 
 async def confirm_variant_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -1555,10 +1470,89 @@ async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE
     
         await update.message.reply_text("Некорректный ID. Попробуйте ещё раз.")
         return ADMIN_AWAIT_EDIT_ID
-    
+    product = await fetchone("SELECT id FROM products WHERE id = ?", (int(product_id),))
+    if not product:
+        await update.message.reply_text(f"Товар с ID {product_id} не найден. Попробуйте снова.")
+        return ADMIN_AWAIT_EDIT_ID
+
     context.user_data['product_to_edit_id'] = int(product_id)
     await show_edit_menu(update, context)
     return ConversationHandler.END
+
+
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает главное меню редактирования с вариантами."""
+    product_id = context.user_data.get('product_to_edit_id')
+    product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
+    
+    variants = await fetchall("""
+        SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
+        FROM product_variants pv
+        LEFT JOIN sizes s ON pv.size_id = s.id
+        LEFT JOIN colors c ON pv.color_id = c.id
+        WHERE pv.product_id = ?
+    """, (product_id,))
+
+    message_text = f"⚙️ Редактирование <b>{product['name']}</b> (ID: {product_id})\n\nВыберите действие:"
+    keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
+    if variants:
+        keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
+        for v in variants:
+            v_text = f"{v['size_name']}, {v['color_name']} | {v['price']}₸ ({v['quantity']} шт.)"
+            keyboard.append([
+                InlineKeyboardButton(v_text, callback_data=f"edit_variant_menu_{v['id']}"),
+                InlineKeyboardButton("🗑️", callback_data=f"delete_variant_{v['id']}")
+            ])
+    keyboard.append([InlineKeyboardButton("➕ Добавить новый вариант", callback_data=f"add_variant_to_{product_id}")])
+    keyboard.append([InlineKeyboardButton("❌ Удалить товар ПОЛНОСТЬЮ", callback_data=f"delete_product_full_{product_id}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Назад в админ-меню", callback_data="back_to_admin_menu")])
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    else:
+        await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+
+async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает нажатия в главном меню редактирования."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "back_to_admin_menu":
+        await query.edit_message_text("Возврат в главное меню...")
+        await admin_menu_entry(update, context)
+        return ADMIN_MENU_AWAIT
+
+    elif data.startswith("delete_variant_"):
+        context.user_data['variant_to_delete'] = int(data.split('_')[2])
+        keyboard = [[InlineKeyboardButton("✅ Да, удалить вариант", callback_data="confirm_delete_variant"), InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]]
+        await query.edit_message_text("Вы уверены?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return EDIT_CONFIRM_DELETE_VARIANT
+
+    elif data.startswith("delete_product_full_"):
+        context.user_data['product_to_delete'] = int(data.split('_')[3])
+        keyboard = [[InlineKeyboardButton("✅ Да, удалить ВСЁ", callback_data="confirm_delete_full"), InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]]
+        await query.edit_message_text("Вы уверены, что хотите удалить товар и ВСЕ его варианты?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return EDIT_CONFIRM_DELETE_FULL_PRODUCT
+
+    elif data.startswith("add_variant_to_"):
+        context.user_data['product_id'] = int(data.split('_')[3])
+        await query.edit_message_text("Добавление нового варианта к существующему товару...")
+        await ask_for_variant_size(update, context)
+        return EDIT_ADD_VARIANT_SIZE
+
+    elif data.startswith("edit_variant_menu_"):
+        context.user_data['variant_to_edit_id'] = int(data.split('_')[3])
+        keyboard = [
+            [InlineKeyboardButton("Цену", callback_data="edit_field_price")],
+            [InlineKeyboardButton("Количество", callback_data="edit_field_quantity")],
+            [InlineKeyboardButton("Фото", callback_data="edit_field_photo")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_edit_menu")]
+        ]
+        await query.edit_message_text("Что изменить в этом варианте?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return EDIT_SELECT_VARIANT_FIELD
+    
+    return EDIT_AWAIT_ACTION
 
 async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category_id = update.message.text.strip()
@@ -1607,43 +1601,7 @@ add_product_conv = ConversationHandler(
 )
 
 
-edit_product_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(admin_await_edit_id, pattern=r"^admin_edit_product$")],
-    states={
-        EDIT_AWAIT_ACTION: [
-            CallbackQueryHandler(handle_edit_action, pattern=r"^(delete_variant_|delete_product_full_|edit_variant_menu_|edit_cancel|back_to_edit_menu|add_variant_to_)")
-        ],
-        EDIT_CONFIRM_DELETE_VARIANT: [
-            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
-        ],
-        EDIT_CONFIRM_DELETE_FULL_PRODUCT: [
-            CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
-        ],
-        EDIT_SELECT_VARIANT_FIELD: [
-            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_|^back_to_edit_menu$")
-        ],
-        EDIT_GET_NEW_VARIANT_VALUE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_variant_value)
-        ],
-        # Состояния для добавления медиа во время редактирования
-        EDIT_ADD_VARIANT_MEDIA: [
-            MessageHandler(filters.PHOTO | filters.VIDEO, add_media),
-            CommandHandler('done', show_edit_menu) # После /done возвращаемся в меню
-        ],
-        # Состояния для добавления нового варианта ВНУТРИ редактирования
-        EDIT_ADD_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern="^size_")],
-        EDIT_GET_NEW_SIZE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name)],
-        EDIT_ADD_VARIANT_COLOR: [CallbackQueryHandler(get_variant_color, pattern="^color_")],
-        EDIT_GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
-        EDIT_ADD_VARIANT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price)],
-        EDIT_ADD_VARIANT_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity)],
-    },
-    fallbacks=[CommandHandler("cancel", cancel_dialog)],
-    per_user=True,
-    per_chat=True,
-    persistent=True,
-    name="edit_product_conversation"
-)
+
 
 
 # ЕДИНЫЙ обработчик для всей админ-панели и редактирования
