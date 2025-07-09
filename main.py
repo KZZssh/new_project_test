@@ -18,7 +18,7 @@ from starlette.routing import Route
 # --- Сіздің импорттарыңыз ---
 from configs import BOT_TOKEN
 from admin_handlers_newupdate import (
-     add_product_conv , edit_product_conv,finish_media,
+     add_product_conv , finish_media,
      report_handler, admin_decision_handler, cancel_dialog, cat_manage_handler,
     subcat_manage_handler, subcat_rename_conv, brand_manage_handler, brand_rename_conv,
     orders_report_handler, orders_report_period_handler, admin_conv, 
@@ -62,7 +62,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
      # АДМИНСКИЙ ИНТЕРФЕЙС
     application.add_handler(add_product_conv)
-    application.add_handler(edit_product_conv)
+    
     
     application.add_handler(start_handler)
     application.add_handler(catalog_handler)
