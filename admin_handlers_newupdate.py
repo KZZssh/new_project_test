@@ -372,6 +372,7 @@ async def start_edit_product(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     
+    # ID товара должен быть уже в user_data из admin_menu_handler
     product_id = context.user_data.get('product_to_edit_id')
     if not product_id:
         await query.edit_message_text("Ошибка: ID товара не найден. Начните заново из /admin.")
@@ -387,7 +388,7 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not product:
         # Используем update.effective_message, чтобы работать и с кнопками, и с сообщениями
         await update.effective_message.reply_text(f"❌ Товар с ID {product_id} не найден.")
-        return ConversationHandler.END
+        return
 
     variants = await fetchall("""
         SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
@@ -440,7 +441,7 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif data.startswith("add_variant_to_"):
         context.user_data['product_id'] = int(data.split('_')[3])
         await query.edit_message_text("Добавление нового варианта к существующему товару...")
-        await ask_for_variant_size(update, context)
+        await ask_for_variant_size(update, context) # Переиспользуем функцию, но она вернет правильное состояние
         return EDIT_ADD_VARIANT_SIZE
 
     elif data.startswith("edit_variant_menu_"):
@@ -502,8 +503,11 @@ async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEF
     context.user_data['field_to_edit'] = field_to_edit
     
     if field_to_edit == "photo":
+        # Для редактирования фото мы можем переиспользовать логику добавления
+        context.user_data['current_variant_id'] = context.user_data.get('variant_to_edit_id')
+        context.user_data['media_order'] = 0
         await query.edit_message_text("Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done.")
-        return EDIT_ADD_VARIANT_MEDIA # Переходим в состояние добавления медиа
+        return EDIT_ADD_VARIANT_MEDIA 
         
     prompt = f"Введите новое значение для поля '{field_to_edit}':"
     await query.edit_message_text(prompt)
@@ -1592,6 +1596,7 @@ add_product_conv = ConversationHandler(
     name="add_product_conversation"
 )
 
+
 edit_product_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_edit_product, pattern=r"^admin_edit_product$")],
     states={
@@ -1629,6 +1634,7 @@ edit_product_conv = ConversationHandler(
     persistent=True,
     name="edit_product_conversation"
 )
+
 
 # ... (Остальной код, который вы не предоставили, но который должен быть здесь) ...
 admin_menu_convhandler = ConversationHandler(
