@@ -1535,16 +1535,16 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             await ask_orders_report_period(update, context)
             return ConversationHandler.END  # <----- обязательно!
 
-        return ConversationHandler.END
-
-    # Эти команды переводят диалог в новое состояние
-    elif data == "admin_edit_product":
-        await query.edit_message_text("Введите ID товара для редактирования:")
-        return ADMIN_AWAIT_EDIT_ID
         
+
+        # Эти команды переводят диалог в новое состояние
+    elif data == "admin_edit_product":
+            await query.edit_message_text("Введите ID товара для редактирования:")
+            return ADMIN_AWAIT_EDIT_ID
+            
     elif data == "admin_manage_subcategories":
-        await query.edit_message_text("Введите ID категории для управления подкатегориями:")
-        return ADMIN_AWAIT_SUBCAT_ID
+            await query.edit_message_text("Введите ID категории для управления подкатегориями:")
+            return ADMIN_AWAIT_SUBCAT_ID
 
     return ADMIN_MENU_AWAIT
 
@@ -1552,6 +1552,7 @@ async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Получает ID товара и переходит в меню редактирования."""
     product_id = update.message.text.strip()
     if not product_id.isdigit():
+    
         await update.message.reply_text("Некорректный ID. Попробуйте ещё раз.")
         return ADMIN_AWAIT_EDIT_ID
     
@@ -1607,7 +1608,7 @@ add_product_conv = ConversationHandler(
 
 
 edit_product_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_edit_product, pattern=r"^admin_edit_product$")],
+    entry_points=[CallbackQueryHandler(admin_await_edit_id, pattern=r"^admin_edit_product$")],
     states={
         EDIT_AWAIT_ACTION: [
             CallbackQueryHandler(handle_edit_action, pattern=r"^(delete_variant_|delete_product_full_|edit_variant_menu_|edit_cancel|back_to_edit_menu|add_variant_to_)")
