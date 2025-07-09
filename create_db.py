@@ -1,18 +1,23 @@
 import sqlite3
-import pathlib
 import os
+import pathlib
 
-# --- ИСПРАВЛЕНО: Путь к базе данных на постоянном диске ---
+# --- ВАЖНО: Импортируем путь к БД из единого источника ---
+from configs import DB_FILE
+
 # Убеждаемся, что папка /data существует (на сервере Fly.io она будет)
-os.makedirs("/data", exist_ok=True) 
-DB_FILE = "/data/shop.db"
+# os.path.dirname(DB_FILE) вернет '/data'
+db_dir = os.path.dirname(DB_FILE)
+if not os.path.exists(db_dir):
+    os.makedirs(db_dir)
 
 connection = sqlite3.connect(DB_FILE)
 cursor = connection.cursor()
+print(f"Подключаюсь к базе данных по пути: {DB_FILE}")
 print("Начинаю полную перестройку базы данных...")
 
 # --- 0. Удаляем старые таблицы, чтобы избежать конфликтов ---
-cursor.execute("DROP TABLE IF EXISTS product_media")  
+cursor.execute("DROP TABLE IF EXISTS product_media")
 cursor.execute("DROP TABLE IF EXISTS product_variants")
 cursor.execute("DROP TABLE IF EXISTS products")
 cursor.execute("DROP TABLE IF EXISTS orders")
@@ -33,9 +38,10 @@ CREATE TABLE IF NOT EXISTS categories (
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS sub_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     category_id INTEGER NOT NULL,
-    FOREIGN KEY (category_id) REFERENCES categories (id)
+    FOREIGN KEY (category_id) REFERENCES categories (id),
+    UNIQUE(name, category_id)
 )
 ''')
 cursor.execute('''
@@ -75,7 +81,7 @@ CREATE TABLE IF NOT EXISTS colors (
 ''')
 print("Таблицы 'sizes' и 'colors' созданы.")
 
-# --- 2. Таблица с вариантами товаров (добавлен photo_id и photo_url) ---
+# --- 2. Таблица с вариантами товаров ---
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS product_variants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,23 +97,21 @@ CREATE TABLE IF NOT EXISTS product_variants (
     FOREIGN KEY (color_id) REFERENCES colors (id)
 )
 ''')
-print("Таблица 'product_variants' создана с photo_id и photo_url.")
+print("Таблица 'product_variants' создана.")
 
-# --- 3. Таблица с медиафайлами (добавлен url) ---
+# --- 3. Таблица с медиафайлами ---
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS product_media (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER,
     variant_id INTEGER,
     file_id TEXT NOT NULL,
     is_video BOOLEAN DEFAULT 0,
     "order" INTEGER DEFAULT 0,
     url TEXT,
-    FOREIGN KEY (product_id) REFERENCES products (id),
     FOREIGN KEY (variant_id) REFERENCES product_variants (id)
 )
 ''')
-print("Таблица 'product_media' создана с url.")
+print("Таблица 'product_media' создана.")
 
 # --- 4. Таблица заказов ---
 cursor.execute('''
@@ -130,3 +134,4 @@ print("Таблица 'orders' создана.")
 connection.commit()
 connection.close()
 print(f"\n✅ База данных '{DB_FILE}' успешно пересоздана с полной структурой!")
+
