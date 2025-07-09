@@ -372,19 +372,7 @@ async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TY
 # === ПРОЦЕСС РЕДАКТИРОВАНИЯ ТОВАРА (НОВЫЙ CONVERSATIONHANDLER) ===
 # =================================================================
 
-async def start_edit_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Начинает диалог редактирования товара."""
-    query = update.callback_query
-    await query.answer()
-    
-    # ID товара должен быть уже в user_data из admin_menu_handler
-    product_id = context.user_data.get('product_to_edit_id')
-    if not product_id:
-        await query.edit_message_text("Ошибка: ID товара не найден. Начните заново из /admin.")
-        return ConversationHandler.END
 
-    await show_edit_menu(update, context)
-    return EDIT_AWAIT_ACTION
 
 
 async def confirm_variant_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1477,7 +1465,7 @@ async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     context.user_data['product_to_edit_id'] = int(product_id)
     await show_edit_menu(update, context)
-    return ConversationHandler.END
+    return EDIT_AWAIT_ACTION
 
 
 async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
