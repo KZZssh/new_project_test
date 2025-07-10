@@ -887,11 +887,28 @@ async def cart_minus(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    product_variant_id = int(query.data.split("_")[1])
     chat_id = update.effective_chat.id
-    subcat_id = context.user_data["current_subcat_id"] if "current_subcat_id" in context.user_data else None
-    brand_id = context.user_data["current_brand_id"] if "current_brand_id" in context.user_data else None
-    all_mode = context.user_data["all_mode"] if "all_mode" in context.user_data else False
+    product_variant_id = int(query.data.split("_")[1])
+    data = query.data.split('_')
+    subcat_id, brand_id = int(data[1]), int(data[2])
+   
+    if 'current_category_id' not in context.user_data:
+        # получить category_id по subcat
+        result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (subcat_id,))
+        if result:
+            context.user_data['current_category_id'] = result['category_id']
+    # Сохраняем текущие subcat_id и brand_id в user_data
+    context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)  # если нет, то 1
+    context.user_data['all_mode'] = True
+    if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
+        # Если нет, то получаем из базы
+        product = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_variant_id,))
+        if product:
+            context.user_data['current_subcat_id'] = product['sub_category_id']
+            context.user_data['current_brand_id'] = product['brand_id']
+
+    context.user_data['current_subcat_id'] = subcat_id
+    context.user_data['current_brand_id'] = brand_id
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
     
     if result:
@@ -905,7 +922,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
 
         # Через паузу — возвращаемся к слайдеру
         await asyncio.sleep(0.8)
-        await back_to_slider(update, context , subcat_id=subcat_id, brand_id=brand_id, all_mode=all_mode)
+        await back_to_slider(update, context , subcat_id=subcat_id, brand_id=brand_id, all_mode= True)
 
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
