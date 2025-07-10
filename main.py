@@ -60,8 +60,9 @@ async def main() -> None:
 
     # --- Барлық обработчиктерді тіркеу ---
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
-    application.add_handler(start_handler)
     application.add_handler(CommandHandler("d" , d))
+    application.add_handler(start_handler)
+    
      # АДМИНСКИЙ ИНТЕРФЕЙС
     
 
