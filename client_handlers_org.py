@@ -1361,6 +1361,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_reply_main_menu(update, context)
 
 async def d(update:Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("."  , parse_mode=ParseMode.HTML
+                                    )
 
     args = context.args
     try:
