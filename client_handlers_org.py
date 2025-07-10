@@ -232,27 +232,18 @@ async def back_to_main_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def generate_pagination_buttons(current_page, total_pages, prefix):
     buttons = []
 
-    # Ограничим количество кнопок в ряду
-    max_buttons = 5
+    max_buttons = 4
     start_page = max(0, current_page - 2)
     end_page = min(total_pages, start_page + max_buttons)
 
-    # Корректировка старта, если мы близко к концу
     if end_page - start_page < max_buttons:
         start_page = max(0, end_page - max_buttons)
 
-    if start_page > 0:
-        buttons.append(InlineKeyboardButton("⏮", callback_data=f"{prefix}{0}"))
-
     for i in range(start_page, end_page):
         if i == current_page:
-            # Текущая страница — без действия
             buttons.append(InlineKeyboardButton(f"{i + 1}", callback_data="noop"))
         else:
             buttons.append(InlineKeyboardButton(f"{i + 1}", callback_data=f"{prefix}{i}"))
-
-    if end_page < total_pages:
-        buttons.append(InlineKeyboardButton("⏭", callback_data=f"{prefix}{total_pages - 1}"))
 
     return buttons
 
@@ -347,19 +338,23 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     # Кнопки
     prefix = f"{'all_' if all_mode else 'brand_'}slider_{subcat_id}_{brand_id or ''}_"
-    nav_buttons = generate_pagination_buttons(page, total, prefix)
+    page_buttons = generate_pagination_buttons(page, total, prefix)
 
-    # Добавим кнопку "Подробнее" между страницами
-    nav_buttons.insert(len(nav_buttons) // 2, InlineKeyboardButton(md2("📦 Подробнее"), callback_data=f"details_{product_id}"))
+    second_row = [
+        InlineKeyboardButton("⏮", callback_data=f"{prefix}0"),
+        InlineKeyboardButton(md2("📦 Подробнее"), callback_data=f"details_{product_id}"),
+        InlineKeyboardButton("⏭", callback_data=f"{prefix}{total - 1}")
+    ]
 
     keyboard = [
-        nav_buttons,
+        page_buttons,
+        second_row,
         [InlineKeyboardButton(
-            md2("⬅️ Назад к разделу") if all_mode else md2("⬅️ Назад к брендам"),
+            md2("◀ Назад к разделу") if all_mode else md2("◀ Назад к брендам"),
             callback_data=f"cat_{user_data['current_category_id']}" if all_mode else f"brands_{subcat_id}"
         )],
         [InlineKeyboardButton(md2("⏪ Категории"), callback_data="back_to_main_cat")],
-        [InlineKeyboardButton(md2("⏮ Главное меню"), callback_data="back_to_main_menu")]
+        [InlineKeyboardButton(md2("🏚 Главное меню"), callback_data="back_to_main_menu")]
     ]
 
     chat_id = query.message.chat_id if query.message else update.effective_chat.id
@@ -395,7 +390,6 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
             await context.bot.send_video(chat_id=chat_id, video=file_id, caption=caption, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             await context.bot.send_photo(chat_id=chat_id, photo=file_id, caption=caption, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard))
-
 
 async def set_slider_context(context, product_id=None, subcat_id=None, brand_id=None):
     if product_id:
