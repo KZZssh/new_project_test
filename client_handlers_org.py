@@ -1226,7 +1226,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
             thumbnail_url=thumb_url if thumb_url else None,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Подробнее", url=f"https://t.me/{context.bot.username}?start=prod_{p['id']}")]
+                [InlineKeyboardButton("Подробнее", url=f"https://t.me/{context.bot.username}?d=prod_{p['id']}")]
             ])
         )
         results.append(result)
