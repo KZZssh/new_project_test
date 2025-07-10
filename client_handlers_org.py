@@ -679,7 +679,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
 
-async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE , subcat_id=None , brand_id=None , all_mode=False):
     query = update.callback_query
     await query.answer()
 
@@ -713,7 +713,7 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await show_product_slider(update, context, all_mode=False)
 
-async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None):
+async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None ):
     variant = await fetchone("""
         SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color
         FROM product_variants pv
@@ -730,6 +730,7 @@ async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_
             await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
         return False
     cart = context.user_data.setdefault('cart', {})
+    
     variant_id_str = str(product_variant_id)
     current_quantity = cart.get(variant_id_str, {}).get('quantity', 0)
     if current_quantity >= variant['quantity']:
@@ -888,7 +889,11 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     product_variant_id = int(query.data.split("_")[1])
     chat_id = update.effective_chat.id
+    subcat_id = context.user_data["current_subcat_id"] if "current_subcat_id" in context.user_data else None
+    brand_id = context.user_data["current_brand_id"] if "current_brand_id" in context.user_data else None
+    all_mode = context.user_data["all_mode"] if "all_mode" in context.user_data else False
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
+    
     if result:
         try:
             await query.message.delete()
@@ -900,7 +905,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
 
         # Через паузу — возвращаемся к слайдеру
         await asyncio.sleep(0.8)
-        await show_product_slider(update, context)
+        await back_to_slider(update, context , subcat_id=subcat_id, brand_id=brand_id, all_mode=all_mode)
 
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
