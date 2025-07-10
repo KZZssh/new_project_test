@@ -1292,8 +1292,8 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = int(p["min_price"]) if p["min_price"] else 0
         thumb_url = p["photo_url"]
 
-        subcat_id = p.get('sub_category_id') or 0
-        brand_id = p.get('brand_id') or 0
+        subcat_id = p['sub_category_id'] or 0
+        brand_id = p['brand_id'] or 0   
 
         message = (
             f"<b>{name}</b>\n\n"
