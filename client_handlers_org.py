@@ -233,6 +233,7 @@ async def back_to_main_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE, brand_id=None, subcat_id=None, all_mode=False):
     query = update.callback_query
     await query.answer()
+
     if subcat_id is None:
         subcat_id = context.user_data.get('current_subcat_id')
     if brand_id is None and not all_mode:
@@ -240,19 +241,17 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not subcat_id:
         await safe_delete_and_send(query, md2("Ошибка: не определён раздел. Попробуйте заново."), context)
         return
-    
 
     if 'current_category_id' not in context.user_data:
-        # получить category_id по subcat
         result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (subcat_id,))
         if result:
             context.user_data['current_category_id'] = result['category_id']
 
-
     page = int(context.user_data.get('product_slider_page', 0))
 
+    await asyncio.sleep(0.5)  # Задержка для корректного обновления
+
     if all_mode:
-        await asyncio.sleep(0.5)  # Небольшая задержка для избежания проблем с обновлением
         products = await fetchall("""
             SELECT p.id, p.name, MIN(pv.price) as min_price, b.name as brand
             FROM products p
@@ -268,7 +267,6 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not brand_id:
             await safe_delete_and_send(query, "Ошибка: не определён бренд.", context)
             return
-        await asyncio.sleep(0.5)  # Небольшая задержка для избежания проблем с обновлением
         products = await fetchall("""
             SELECT p.id, p.name, MIN(pv.price) as min_price, b.name as brand
             FROM products p
@@ -278,122 +276,103 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
             GROUP BY p.id
             ORDER BY min_price
         """, (subcat_id, brand_id))
+
     if not products:
         await safe_delete_and_send(query, md2("Нет товаров!"), context)
         return
 
-   
-
-
     total = len(products)
-    if page < 0: page = 0
-    if page >= total: page = total - 1
+    page = max(0, min(page, total - 1))
     context.user_data['product_slider_page'] = page
+    context.user_data['all_mode'] = all_mode
 
     product = products[page]
     product_id = product['id']
     context.user_data['current_product_id'] = product_id
 
-    media_row = await fetchone("""
-            SELECT file_id, is_video FROM product_media
-            WHERE variant_id = (
-                SELECT id FROM product_variants WHERE product_id = ? LIMIT 1
-            )
-            ORDER BY "order" LIMIT 1
-        """, (product_id,))
-    if not media_row:
-        file_id = None
-        is_video = False
-    else:
-        file_id = media_row['file_id']
-        is_video = bool(media_row['is_video'])
+    # Установим subcat/brand/category если не установлены
+    if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
+        info = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_id,))
+        if info:
+            context.user_data['current_subcat_id'] = info['sub_category_id']
+            context.user_data['current_brand_id'] = info['brand_id']
+            result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (info['sub_category_id'],))
+            if result:
+                context.user_data['current_category_id'] = result['category_id']
 
+    # Получим медиа
+    media_row = await fetchone("""
+        SELECT file_id, is_video FROM product_media
+        WHERE variant_id = (
+            SELECT id FROM product_variants WHERE product_id = ? LIMIT 1
+        )
+        ORDER BY "order" LIMIT 1
+    """, (product_id,))
+    file_id = media_row['file_id'] if media_row else None
+    is_video = bool(media_row['is_video']) if media_row else False
+
+    # Текст карточки
     caption = (
         f"*{md2(product['name'])}*\n"
         f"{md2('Бренд')}: {md2(product['brand'])}\n"
         f"{md2('Цена')}: {md2(product['min_price'])}₸\n"
-        f"_{md2('Страница')} {md2(page+1)}/{md2(total)}_"
+        f"_{md2('Страница')} {md2(page + 1)}/{md2(total)}_"
     )
+
+    # Кнопки
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(md2("⬅️"), callback_data=f"{'all_' if all_mode else 'brand_'}slider_{subcat_id}_{brand_id if brand_id else ''}_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(md2("⬅️"), callback_data=f"{'all_' if all_mode else 'brand_'}slider_{subcat_id}_{brand_id if brand_id else ''}_{page - 1}"))
     nav_buttons.append(InlineKeyboardButton(md2("Подробнее о товаре"), callback_data=f"details_{product_id}"))
-    if page < total-1:
-        nav_buttons.append(InlineKeyboardButton(md2("➡️"), callback_data=f"{'all_' if all_mode else 'brand_'}slider_{subcat_id}_{brand_id if brand_id else ''}_{page+1}"))
+    if page < total - 1:
+        nav_buttons.append(InlineKeyboardButton(md2("➡️"), callback_data=f"{'all_' if all_mode else 'brand_'}slider_{subcat_id}_{brand_id if brand_id else ''}_{page + 1}"))
 
-    context.user_data['all_mode'] = all_mode
-    if all_mode:
-        nav_buttons2 = [InlineKeyboardButton(md2("⬅️ Назад к разделу"), callback_data = f"cat_{context.user_data['current_category_id']}")] 
-        nav_buttons3 = [InlineKeyboardButton(md2("⏪ Категории ") ,callback_data="back_to_main_cat")]
-        nav_buttons4 = [InlineKeyboardButton(md2("⏮ Главное меню ") , callback_data="back_to_main_menu")]
-
-    else:
-        nav_buttons2 = [InlineKeyboardButton(md2("⬅️ Назад к брендам"), callback_data=f"brands_{subcat_id}")]
-        nav_buttons3 = [InlineKeyboardButton(md2("⏪ Категории ") ,callback_data="back_to_main_cat")]
-        nav_buttons4 = [InlineKeyboardButton(md2("⏮ Главное меню ") , callback_data="back_to_main_menu")]
-    keyboard = [nav_buttons, nav_buttons2 , nav_buttons3 , nav_buttons4]
-
-    if not file_id:
-        await query.message.chat.send_message(
-            caption,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="MarkdownV2"
+    nav_buttons2 = [
+        InlineKeyboardButton(
+            md2("⬅️ Назад к разделу") if all_mode else md2("⬅️ Назад к брендам"),
+            callback_data=f"cat_{context.user_data['current_category_id']}" if all_mode else f"brands_{subcat_id}"
         )
+    ]
+    nav_buttons3 = [InlineKeyboardButton(md2("⏪ Категории"), callback_data="back_to_main_cat")]
+    nav_buttons4 = [InlineKeyboardButton(md2("⏮ Главное меню"), callback_data="back_to_main_menu")]
+    keyboard = [nav_buttons, nav_buttons2, nav_buttons3, nav_buttons4]
+
+    # Получим chat_id безопасно
+    chat_id = query.message.chat_id if query.message else update.effective_chat.id
+
+    # Отправка медиа
+    if not file_id:
+        await context.bot.send_message(chat_id=chat_id, text=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
         return
 
-    if is_video:
-        try:
+    try:
+        if is_video:
             await query.message.edit_media(
                 media=InputMediaVideo(file_id, caption=caption, parse_mode="MarkdownV2"),
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-        except Exception:
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            await query.message.chat.send_video(
-                video=file_id,
-                caption=caption,
-                parse_mode="MarkdownV2",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-    else:
-        if query.message.photo:
-            try:
+        else:
+            if query.message.photo:
                 await query.edit_message_media(
                     media=InputMediaPhoto(file_id, caption=caption, parse_mode="MarkdownV2"),
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
-            except Exception:
-                try:
-                    await query.message.delete()
-                except Exception:
-                    pass
-                await query.message.chat.send_photo(
-                    photo=file_id,
-                    caption=caption,
-                    parse_mode="MarkdownV2",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-        else:
-            try:
+            else:
                 await query.message.edit_caption(
                     caption=caption,
                     parse_mode="MarkdownV2",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
-            except Exception:
-                try:
-                    await query.message.delete()
-                except Exception:
-                    pass
-            await query.message.chat.send_photo(
-                photo=file_id,
-                caption=caption,
-                parse_mode="MarkdownV2",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+    except Exception as e:
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        if is_video:
+            await context.bot.send_video(chat_id=chat_id, video=file_id, caption=caption, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await context.bot.send_photo(chat_id=chat_id, photo=file_id, caption=caption, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard))
+
 
 async def handle_brand_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
