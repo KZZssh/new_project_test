@@ -229,15 +229,18 @@ async def back_to_main_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="MarkdownV2"
     )
 
+
+
 def generate_pagination_buttons(current_page, total_pages, prefix):
     buttons = []
-
     max_buttons = 4
-    start_page = max(0, current_page - 2)
+
+    start_page = max(0, current_page - current_page % max_buttons)
     end_page = min(total_pages, start_page + max_buttons)
 
-    if end_page - start_page < max_buttons:
-        start_page = max(0, end_page - max_buttons)
+    # ⏮ если есть предыдущие страницы
+    if start_page > 0:
+        buttons.append(InlineKeyboardButton("⏮", callback_data=f"{prefix}{start_page - max_buttons}"))
 
     for i in range(start_page, end_page):
         if i == current_page:
@@ -245,7 +248,14 @@ def generate_pagination_buttons(current_page, total_pages, prefix):
         else:
             buttons.append(InlineKeyboardButton(f"{i + 1}", callback_data=f"{prefix}{i}"))
 
+    # ⏭ если есть ещё страницы
+    if end_page < total_pages:
+        buttons.append(InlineKeyboardButton("⏭", callback_data=f"{prefix}{start_page + max_buttons}"))
+
     return buttons
+
+
+
 
 async def noop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
@@ -336,14 +346,13 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"_{md2('Страница')} {md2(page + 1)}/{md2(total)}_"
     )
 
-    # Кнопки
+    
     prefix = f"{'all_' if all_mode else 'brand_'}slider_{subcat_id}_{brand_id or ''}_"
     page_buttons = generate_pagination_buttons(page, total, prefix)
 
+    # Вторая строка — подробнее
     second_row = [
-        InlineKeyboardButton("⏮", callback_data=f"{prefix}0"),
-        InlineKeyboardButton(md2("📦 Подробнее"), callback_data=f"details_{product_id}"),
-        InlineKeyboardButton("⏭", callback_data=f"{prefix}{total - 1}")
+        InlineKeyboardButton(md2("📦 Подробнее"), callback_data=f"details_{product_id}")
     ]
 
     keyboard = [
@@ -356,6 +365,7 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton(md2("⏪ Категории"), callback_data="back_to_main_cat")],
         [InlineKeyboardButton(md2("🏚 Главное меню"), callback_data="back_to_main_menu")]
     ]
+
 
     chat_id = query.message.chat_id if query.message else update.effective_chat.id
 
@@ -499,7 +509,7 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
                 context.user_data['current_category_id'] = result['category_id']
 
     context.user_data['all_mode'] = context.user_data.get('all_mode', False)
-    context.user_data['product_slider_page'] = 0
+    context.user_data['product_slider_page'] = context.user_data.get('product_slider_page', 0)
 
     product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
     if not product:
@@ -1290,7 +1300,8 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Бренд:</b> {brand}\n"
             f"<b>Цена от:</b> {price} ₸"
         )
-
+        subcat_id = p['sub_category_id'] or 0
+        brand_id = p['brand_id'] or 0
         result = InlineQueryResultArticle(
             id=f"prod_{p['id']}",
             title=name,
@@ -1301,8 +1312,8 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
             thumbnail_url=thumb_url if thumb_url else None,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Подробнее", callback_data=f"details_{p['id']}_{p['subcategory']}_{p['brand']}"
-)],
+                [InlineKeyboardButton("Подробнее", callback_data=f"details_{p['id']}_{subcat_id}_{brand_id}")] 
+                
             ])
         )
         results.append(result)
@@ -1471,8 +1482,8 @@ help_handler = CallbackQueryHandler(help, pattern="^help$")
 
 brand_slider_nav_handler = CallbackQueryHandler(handle_brand_slider, pattern="^brand_slider_\\d+_\\d+_\\d+$")
 all_slider_nav_handler = CallbackQueryHandler(handle_all_slider, pattern="^all_slider_\\d+__\\d+$")
-details_handler = CallbackQueryHandler(show_product_details, pattern=r"^details_\d+(_\d+_\d+)?$"
-)
+details_handler = CallbackQueryHandler(show_product_details, pattern=r"^details_\d+$")
+
 choose_color_handler = CallbackQueryHandler(choose_color, pattern="^color_\\d+_\\d+$")
 choose_size_handler = CallbackQueryHandler(choose_size, pattern="^size_\\d+_\\d+_\\d+$")
 back_to_slider_handler = CallbackQueryHandler(back_to_slider, pattern="^back_to_slider$")
