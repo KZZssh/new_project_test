@@ -233,24 +233,26 @@ async def back_to_main_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def generate_pagination_buttons(current_page, total_pages, prefix):
     buttons = []
-    max_buttons = 4
 
-    start_page = max(0, current_page - current_page % max_buttons)
-    end_page = min(total_pages, start_page + max_buttons)
+    max_buttons = 4  # максимум числовых кнопок на экране
+    current_block = current_page // max_buttons
+    start_page = current_block * max_buttons
+    end_page = min(start_page + max_buttons, total_pages)
 
-    # ⏮ если есть предыдущие страницы
+    # ⏮ назад на предыдущий блок
     if start_page > 0:
-        buttons.append(InlineKeyboardButton("⏮", callback_data=f"{prefix}{start_page - max_buttons}"))
+        buttons.append(InlineKeyboardButton("⏮", callback_data=f"{prefix}{start_page - 1}"))
 
+    # Числовые кнопки
     for i in range(start_page, end_page):
         if i == current_page:
             buttons.append(InlineKeyboardButton(f"{i + 1}", callback_data="noop"))
         else:
             buttons.append(InlineKeyboardButton(f"{i + 1}", callback_data=f"{prefix}{i}"))
 
-    # ⏭ если есть ещё страницы
+    # ⏭ вперёд на следующий блок
     if end_page < total_pages:
-        buttons.append(InlineKeyboardButton("⏭", callback_data=f"{prefix}{start_page + max_buttons}"))
+        buttons.append(InlineKeyboardButton("⏭", callback_data=f"{prefix}{end_page}"))
 
     return buttons
 
@@ -490,15 +492,7 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data['current_product_id'] = product_id
 
-    # Сохраняем контекст слайдера
-    context.user_data['return_to_slider'] = {
-        'product_slider_page': context.user_data.get('product_slider_page', 0),
-        'all_mode': context.user_data.get('all_mode', False),
-        'current_subcat_id': context.user_data.get('current_subcat_id'),
-        'current_brand_id': context.user_data.get('current_brand_id')
-    }
-
-    # Дополнительно достаём subcat/brand/category из БД
+    # Получаем недостающие данные subcat/brand/category
     if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
         info = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_id,))
         if info:
@@ -509,13 +503,51 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
                 context.user_data['current_category_id'] = result['category_id']
 
     context.user_data['all_mode'] = context.user_data.get('all_mode', False)
-    context.user_data['product_slider_page'] = context.user_data.get('product_slider_page', 0)
+    
+    # 🧠 Вычисляем product_slider_page если его ещё нет
+    if 'product_slider_page' not in context.user_data or context.user_data['product_slider_page'] == 0:
+        subcat_id = context.user_data.get('current_subcat_id')
+        brand_id = context.user_data.get('current_brand_id')
+        all_mode = context.user_data['all_mode']
 
+        if subcat_id:
+            if all_mode:
+                product_list = await fetchall("""
+                    SELECT p.id FROM products p
+                    JOIN product_variants pv ON p.id = pv.product_id
+                    WHERE p.sub_category_id = ? AND pv.quantity > 0
+                    GROUP BY p.id
+                    ORDER BY MIN(pv.price)
+                """, (subcat_id,))
+            else:
+                product_list = await fetchall("""
+                    SELECT p.id FROM products p
+                    JOIN product_variants pv ON p.id = pv.product_id
+                    WHERE p.sub_category_id = ? AND p.brand_id = ? AND pv.quantity > 0
+                    GROUP BY p.id
+                    ORDER BY MIN(pv.price)
+                """, (subcat_id, brand_id))
+
+            for i, item in enumerate(product_list):
+                if item['id'] == product_id:
+                    context.user_data['product_slider_page'] = i
+                    break
+
+    # 💾 Сохраняем контекст слайдера
+    context.user_data['return_to_slider'] = {
+        'product_slider_page': context.user_data.get('product_slider_page', 0),
+        'all_mode': context.user_data.get('all_mode', False),
+        'current_subcat_id': context.user_data.get('current_subcat_id'),
+        'current_brand_id': context.user_data.get('current_brand_id')
+    }
+
+    # Получаем товар
     product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
     if not product:
         await update.message.reply_text("❌ Товар не найден.")
         return
 
+    # Достаём доступные цвета
     colors = await fetchall("""
         SELECT DISTINCT c.id, c.name
         FROM product_variants pv
@@ -532,7 +564,6 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard.append([InlineKeyboardButton("◀️ К товарам", callback_data="back_to_slider")])
 
     await safe_edit_or_send(query or update, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
-
 
 async def get_color_media(product_id, color_id):
     # Получаем все variant_id для этого товара и цвета
@@ -720,7 +751,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
         [InlineKeyboardButton(md2("◀️ К размерам"), callback_data=f"color_{product_id}_{color_id}")],
         [InlineKeyboardButton(md2("⏪ К товарам "), callback_data="back_to_slider")] ,
-        [InlineKeyboardButton(md2("⏮ Главная меню ") , callback_data="back_to_main_menu")]
+        [InlineKeyboardButton(md2("🏚 Главное меню ") , callback_data="back_to_main_menu")]
     ]
     await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
 
@@ -970,7 +1001,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
             print("❌ Не удалось удалить сообщение:", e)
         await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!")
 
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(1.3)
 
         slider_ctx = context.user_data.get('return_to_slider', {})
         context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
