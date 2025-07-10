@@ -389,7 +389,7 @@ async def handle_all_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data.split('_')
     subcat_id, page = int(data[2]), int(data[4])
-    context.user_data['all_mode'] = True
+    
 
     context.user_data['current_subcat_id'] = subcat_id
     context.user_data['product_slider_page'] = page
@@ -403,16 +403,16 @@ async def start_brand_slider(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data['current_subcat_id'] = subcat_id
     context.user_data['current_brand_id'] = brand_id
-    context.user_data['product_slider_page'] = 0
+    
     await show_product_slider(update, context, brand_id=brand_id, all_mode=False)
 
 async def start_all_slider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     subcat_id = int(query.data.split('_')[1])
-    context.user_data['all_mode'] = True
+    
 
     context.user_data['current_subcat_id'] = subcat_id
-    context.user_data['product_slider_page'] = 0
+    
     await show_product_slider(update, context, all_mode=True)
 
 # ...далее идут функции для деталей товара, корзины, оформления заказа и т.д...
@@ -658,7 +658,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
 
-async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE , subcat_id=None , brand_id=None , all_mode=False):
+async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE , subcat_id=None , brand_id=None ):
     query = update.callback_query
     await query.answer()
 
@@ -879,7 +879,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
             context.user_data['current_category_id'] = result['category_id']
     # Сохраняем текущие subcat_id и brand_id в user_data
     context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)  # если нет, то 1
-    context.user_data['all_mode'] = True
+    
     if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
         # Если нет, то получаем из базы
         product = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_variant_id,))
@@ -898,11 +898,13 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
             print("❌ Не удалось удалить сообщение:", e)
 
         # Отправляем подтверждение
-        await query.message.chat.send_message("✅ Добавлено в корзину!")
+        chat_id = query.message.chat_id if query.message else update.effective_chat.id
+        await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!")
+
 
         # Через паузу — возвращаемся к слайдеру
         await asyncio.sleep(0.8)
-        await back_to_slider(update, context , subcat_id=subcat_id, brand_id=brand_id, all_mode= True)
+        await back_to_slider(update, context , subcat_id=subcat_id, brand_id=brand_id)
 
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
