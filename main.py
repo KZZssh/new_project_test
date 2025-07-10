@@ -35,7 +35,7 @@ from client_handlers_org import (
     add_to_cart_handler, cart_handler, cart_plus_handler, cart_minus_handler, clear_cart_handler,
     payment_confirmation_handler, checkout_handler, back_to_brands_handler, back_to_main_cat_handler,
     color_photo_pagination, inlinequery, help_handler, reply_main_menu_handler,
-    cancel_by_client, confirm_cancel, back_to_payment, back_to_main_menu_handler, d
+    cancel_by_client, confirm_cancel, back_to_payment, back_to_main_menu_handler, d , noop_handler
 )
 
 # Логгингті баптау
@@ -76,6 +76,8 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"))
     application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"))
     application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"))
+    application.add_handler(CallbackQueryHandler(noop_handler, pattern="^noop$"))
+
     application.add_handler(add_product_conv)
     application.add_handler(brand_manage_handler)
     application.add_handler(brand_rename_conv)
