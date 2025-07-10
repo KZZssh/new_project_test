@@ -502,7 +502,12 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
             if result:
                 context.user_data['current_category_id'] = result['category_id']
 
-    context.user_data['all_mode'] = context.user_data.get('all_mode', False)
+    if 'all_mode' not in context.user_data:
+    # Если зашли из inline (нет истории), включаем all_mode
+        context.user_data['all_mode'] = True
+    else:
+        context.user_data['all_mode'] = context.user_data.get('all_mode', False)
+
     
     # 🧠 Вычисляем product_slider_page если его ещё нет
     if 'product_slider_page' not in context.user_data or context.user_data['product_slider_page'] == 0:
