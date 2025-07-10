@@ -1355,6 +1355,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("Не удалось удалить /start:", e)
 
+    
+
+    # Иначе просто показываем меню
+    await show_reply_main_menu(update, context)
+
+async def d(update:Update, context: ContextTypes.DEFAULT_TYPE):
+
+    args = context.args
+    try:
+        await update.message.delete()  # ← удаляет сообщение с /d
+    except Exception as e:
+        print("Не удалось удалить /d:", e)
     # Если был передан параметр ?start=prod_123
     if args and args[0].startswith("prod_"):
         product_id = int(args[0].split("_")[1])
@@ -1363,11 +1375,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Показываем детали товара
         await show_product_details(update, context)
         return
-
-    # Иначе просто показываем меню
-    await show_reply_main_menu(update, context)
-
-
+    
 
 
     # --- Регистрация обработчиков ---

@@ -35,7 +35,7 @@ from client_handlers_org import (
     add_to_cart_handler, cart_handler, cart_plus_handler, cart_minus_handler, clear_cart_handler,
     payment_confirmation_handler, checkout_handler, back_to_brands_handler, back_to_main_cat_handler,
     color_photo_pagination, inlinequery, help_handler, reply_main_menu_handler,
-    cancel_by_client, confirm_cancel, back_to_payment, back_to_main_menu_handler
+    cancel_by_client, confirm_cancel, back_to_payment, back_to_main_menu_handler, d
 )
 
 # Логгингті баптау
@@ -61,6 +61,7 @@ async def main() -> None:
     # --- Барлық обработчиктерді тіркеу ---
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(start_handler)
+    application.add_handler(CommandHandler("d" , d))
      # АДМИНСКИЙ ИНТЕРФЕЙС
     
 
