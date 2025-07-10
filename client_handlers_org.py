@@ -438,6 +438,22 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     context.user_data['current_product_id'] = product_id
+    # Добавим недостающие поля в context.user_data
+    if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
+        info = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_id,))
+        if info:
+            context.user_data['current_subcat_id'] = info['sub_category_id']
+            context.user_data['current_brand_id'] = info['brand_id']
+            result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (info['sub_category_id'],))
+            if result:
+                context.user_data['current_category_id'] = result['category_id']
+
+    # Если вызов был из inline-режима или вручную, можно задать "all_mode" = True
+    context.user_data.setdefault('all_mode', True)
+
+    # Сбросим позицию слайдера
+    context.user_data['product_slider_page'] = 0
+
 
     product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
     if not product:
@@ -868,44 +884,58 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     chat_id = update.effective_chat.id
     product_variant_id = int(query.data.split("_")[1])
-    data = query.data.split('_')
+
     subcat_id = context.user_data.get('current_subcat_id')
     brand_id = context.user_data.get('current_brand_id')
-   
-    if 'current_category_id' not in context.user_data:
-        # получить category_id по subcat
-        result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (subcat_id,))
-        if result:
-            context.user_data['current_category_id'] = result['category_id']
-    # Сохраняем текущие subcat_id и brand_id в user_data
-    context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)  # если нет, то 1
-    
-    if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
-        # Если нет, то получаем из базы
-        product = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_variant_id,))
-        if product:
-            context.user_data['current_subcat_id'] = product['sub_category_id']
-            context.user_data['current_brand_id'] = product['brand_id']
-    
-    context.user_data['current_subcat_id'] = subcat_id
-    context.user_data['current_brand_id'] = brand_id
+
+    # Если subcat_id или brand_id нет — получаем их из БД
+    if not subcat_id or not brand_id:
+        product_info = await fetchone(
+            "SELECT p.sub_category_id, p.brand_id, sc.category_id "
+            "FROM product_variants pv "
+            "JOIN products p ON pv.product_id = p.id "
+            "JOIN sub_categories sc ON p.sub_category_id = sc.id "
+            "WHERE pv.id = ?",
+            (product_variant_id,)
+        )
+        if product_info:
+            subcat_id = product_info['sub_category_id']
+            brand_id = product_info['brand_id']
+            category_id = product_info['category_id']
+
+            context.user_data['current_subcat_id'] = subcat_id
+            context.user_data['current_brand_id'] = brand_id
+            context.user_data['current_category_id'] = category_id
+
+    # Если всё равно чего-то не хватает — подставим безопасное значение
+    context.user_data['current_subcat_id'] = subcat_id or 1
+    context.user_data['current_brand_id'] = brand_id or 1
+    context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)
+
+    # Устанавливаем режим отображения всех товаров
+    context.user_data['all_mode'] = True
+
+    # Сброс слайдера на первую страницу
+    context.user_data['product_slider_page'] = 0
+
+    # Добавление в корзину
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
-    
+
     if result:
         try:
             await query.message.delete()
         except Exception as e:
             print("❌ Не удалось удалить сообщение:", e)
 
-        # Отправляем подтверждение
-        chat_id = query.message.chat_id if query.message else update.effective_chat.id
         await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!")
 
-
-        # Через паузу — возвращаемся к слайдеру
+        # Возврат к слайдеру после короткой паузы
         await asyncio.sleep(0.8)
-        all_mode = context.user_data.get('all_mode', False)
-        await show_product_slider(update, context, subcat_id=subcat_id, brand_id=brand_id, all_mode=all_mode)
+        await show_product_slider(update, context,
+                                  subcat_id=subcat_id,
+                                  brand_id=brand_id,
+                                  all_mode=True)
+
 
 
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
