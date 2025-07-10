@@ -1239,6 +1239,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query_text:
         query_sql = """
             SELECT p.id, p.name, p.description,
+                   p.sub_category_id, p.brand_id,
                    c.name AS category,
                    sc.name AS subcategory,
                    b.name AS brand,
@@ -1249,23 +1250,24 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
             LEFT JOIN brands b ON p.brand_id = b.id
             LEFT JOIN product_variants pv ON p.id = pv.product_id
-            GROUP BY p.id, p.name, p.description, c.name, sc.name, b.name
+            GROUP BY p.id
             LIMIT 10
         """
         params = ()
     else:
         query_sql = """
             SELECT p.id, p.name, p.description,
+                   p.sub_category_id, p.brand_id,
                    c.name AS category,
                    sc.name AS subcategory,
                    b.name AS brand,
                    MIN(pv.price) AS min_price,
                    (
-           SELECT photo_url
-           FROM product_variants pv2
-           WHERE pv2.product_id = p.id AND pv2.photo_url IS NOT NULL
-           ORDER BY pv2.id ASC LIMIT 1
-       ) AS photo_url
+                       SELECT photo_url
+                       FROM product_variants pv2
+                       WHERE pv2.product_id = p.id AND pv2.photo_url IS NOT NULL
+                       ORDER BY pv2.id ASC LIMIT 1
+                   ) AS photo_url
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
@@ -1273,7 +1275,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             LEFT JOIN product_variants pv ON p.id = pv.product_id
             WHERE p.name LIKE ? OR p.description LIKE ? OR
                   c.name LIKE ? OR sc.name LIKE ? OR b.name LIKE ?
-            GROUP BY p.id, p.name, p.description, c.name, sc.name, b.name
+            GROUP BY p.id
             LIMIT 10
         """
         params = (f"%{query_text}%",) * 5
@@ -1290,7 +1292,8 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = int(p["min_price"]) if p["min_price"] else 0
         thumb_url = p["photo_url"]
 
-        print("INLINE PRODUCT:", name, category, subcat, brand, price, "📷", thumb_url)
+        subcat_id = p.get('sub_category_id') or 0
+        brand_id = p.get('brand_id') or 0
 
         message = (
             f"<b>{name}</b>\n\n"
@@ -1300,8 +1303,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Бренд:</b> {brand}\n"
             f"<b>Цена от:</b> {price} ₸"
         )
-        subcat_id = p['sub_category_id'] or 0
-        brand_id = p['brand_id'] or 0
+
         result = InlineQueryResultArticle(
             id=f"prod_{p['id']}",
             title=name,
@@ -1312,13 +1314,13 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
             thumbnail_url=thumb_url if thumb_url else None,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Подробнее", callback_data=f"details_{p['id']}_{subcat_id}_{brand_id}")] 
-                
+                [InlineKeyboardButton("📦 Подробнее", callback_data=f"details_{p['id']}_{subcat_id}_{brand_id}")]
             ])
         )
         results.append(result)
 
     await update.inline_query.answer(results, cache_time=1)
+
 
 
 
@@ -1482,7 +1484,8 @@ help_handler = CallbackQueryHandler(help, pattern="^help$")
 
 brand_slider_nav_handler = CallbackQueryHandler(handle_brand_slider, pattern="^brand_slider_\\d+_\\d+_\\d+$")
 all_slider_nav_handler = CallbackQueryHandler(handle_all_slider, pattern="^all_slider_\\d+__\\d+$")
-details_handler = CallbackQueryHandler(show_product_details, pattern=r"^details_\d+$")
+details_handler = CallbackQueryHandler(show_product_details, pattern=r"^details_\d+(_\d+_\d+)?$")
+
 
 choose_color_handler = CallbackQueryHandler(choose_color, pattern="^color_\\d+_\\d+$")
 choose_size_handler = CallbackQueryHandler(choose_size, pattern="^size_\\d+_\\d+_\\d+$")
