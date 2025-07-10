@@ -890,7 +890,8 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     chat_id = update.effective_chat.id
     product_variant_id = int(query.data.split("_")[1])
     data = query.data.split('_')
-    
+    subcat_id = context.user_data.get('current_subcat_id')
+    brand_id = context.user_data.get('current_brand_id')
    
     if 'current_category_id' not in context.user_data:
         # получить category_id по subcat
@@ -906,8 +907,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
         if product:
             context.user_data['current_subcat_id'] = product['sub_category_id']
             context.user_data['current_brand_id'] = product['brand_id']
-    subcat_id = context.user_data.get('current_subcat_id')
-    brand_id = context.user_data.get('current_brand_id')
+    
     context.user_data['current_subcat_id'] = subcat_id
     context.user_data['current_brand_id'] = brand_id
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
