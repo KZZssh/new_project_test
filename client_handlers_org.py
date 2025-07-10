@@ -900,7 +900,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
 
         # Через паузу — возвращаемся к слайдеру
         await asyncio.sleep(0.8)
-        await back_to_slider(update, context)
+        await show_product_slider(update, context)
 
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
