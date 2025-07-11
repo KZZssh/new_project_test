@@ -925,7 +925,7 @@ async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_T
         
 
 async def reply_cart_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
+
     await show_cart(update, context, edit=False)
 
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1557,7 +1557,7 @@ choose_color_handler = CallbackQueryHandler(choose_color, pattern="^color_\\d+_\
 choose_size_handler = CallbackQueryHandler(choose_size, pattern="^size_\\d+_\\d+_\\d+$")
 back_to_slider_handler = CallbackQueryHandler(back_to_slider, pattern="^back_to_slider$")
 add_to_cart_handler = CallbackQueryHandler(add_to_cart_handler_func, pattern="^add_\\d+$")
-cart_back_handler = CallbackQueryHandler(back_from_cart_handler, pattern="^back_from_cart$")
+cart_handler = CallbackQueryHandler(back_from_cart_handler, pattern="^back_from_cart$")
 
 cart_plus_handler = CallbackQueryHandler(cart_plus, pattern="^cart_plus_\\d+$")
 cart_minus_handler = CallbackQueryHandler(cart_minus, pattern="^cart_minus_\\d+$")
