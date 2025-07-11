@@ -28,19 +28,7 @@ def md2(text):
     chars = r"_*[]()~`>#+-=|{}.!"
     return re.sub(f'([{re.escape(chars)}])', r'\\\1', str(text))
 
-async def safe_edit_or_send(query, text, reply_markup=None, parse_mode=None, context=None):
-    try:
-        if getattr(query, "message", None) and getattr(query.message, "photo", None):
-            await query.message.edit_caption(caption=text, reply_markup=reply_markup, parse_mode=parse_mode)
-        elif getattr(query, "message", None):
-            await query.message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
-        elif getattr(query, "from_user", None) and context:
-            await context.bot.send_message(chat_id=query.from_user.id, text=text, reply_markup=reply_markup, parse_mode=parse_mode)
-    except Exception:
-        if getattr(query, "message", None) and getattr(query.message, "chat", None):
-            await context.bot.send_message(chat_id=query.message.chat.id, text=text, reply_markup=reply_markup, parse_mode=parse_mode)
-        elif getattr(query, "from_user", None) and context:
-            await context.bot.send_message(chat_id=query.from_user.id, text=text, reply_markup=reply_markup, parse_mode=parse_mode)
+
 
 
 async def safe_edit_or_send(
@@ -664,7 +652,7 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- Отправляем медиа или просто текст с кнопками ---
     if not file_id:
-        await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2", context=context)
+        await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", context=context)
         context.user_data['color_photo_page'] = page
         return
 

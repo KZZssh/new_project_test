@@ -587,6 +587,8 @@ async def report_combined(update, context):
 
 # --- Подтверждение заказа админом ---
 async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info(f"🔥 handle_admin_decision сработал — {query.data}")
+
     query = update.callback_query
     await query.answer()
     parts = query.data.split('_')
@@ -645,6 +647,7 @@ async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TY
                 reply_markup=InlineKeyboardMarkup(status_buttons)
             )
         except Exception:
+            logging.exception("❌ Ошибка при подтверждении заказа!")
             await query.edit_message_text("Ошибка при подтверждении заказа.", parse_mode=ParseMode.HTML)
 
 
@@ -1661,9 +1664,6 @@ admin_conv = ConversationHandler(
             CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
         ],
 
-        EDIT_CONFIRM_DELETE_VARIANT: [
-            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
-        ],
         EDIT_CONFIRM_DELETE_FULL_PRODUCT: [
             CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
         ],
