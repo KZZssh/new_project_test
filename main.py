@@ -62,6 +62,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
     application.add_handler(CommandHandler("d" , d))
     application.add_handler(start_handler)
+
     
      # АДМИНСКИЙ ИНТЕРФЕЙС
     
@@ -82,6 +83,8 @@ async def main() -> None:
     application.add_handler(brand_manage_handler)
     application.add_handler(brand_rename_conv)
     application.add_handler(admin_conv)
+
+    
     
     application.add_handler(cat_manage_handler)
     application.add_handler(subcat_manage_handler)

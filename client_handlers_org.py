@@ -836,9 +836,18 @@ async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_
 async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=True):
     cart = context.user_data.setdefault('cart', {})
     chat_id = update.effective_chat.id
+    
+
 
     if update.callback_query:
         await update.callback_query.answer()
+
+
+    if update.callback_query and update.callback_query.data == "back_from_cart":
+        context.user_data["cart_return_source"] = "main_menu"
+    elif update.callback_query and update.callback_query.data.startswith("slider_"):
+        context.user_data["cart_return_source"] = "slider"
+
 
     kb_back = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")]]
     
@@ -915,8 +924,11 @@ async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await show_product_slider(update, context, subcat_id=context.user_data['current_subcat_id'], all_mode=True)
             else:
                 await show_product_slider(update, context, brand_id=context.user_data['current_brand_id'], subcat_id=context.user_data['current_subcat_id'])
-            return
+            
 
+            if source == "main_menu":
+                await show_reply_main_menu(update, context, text="Вы вернулись из корзины.\nГлавное меню:")
+                return
     # По умолчанию — назад в главное меню
     await show_reply_main_menu(update, context)
 
