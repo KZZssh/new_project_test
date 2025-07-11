@@ -850,10 +850,13 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
         await update.callback_query.answer()
     data = update.callback_query.data if update.callback_query else None
     if data:
-        if data.startswith("add_"):
-            context.user_data['cart_return_source'] = "slider"
-        elif data == "cart":
+        if data == "cart":
+            # Пользователь пришел из главного меню
             context.user_data['cart_return_source'] = "main_menu"
+        elif data.startswith("add_"):
+            # Только если до этого не было main_menu
+            if context.user_data.get('cart_return_source') != "main_menu":
+                context.user_data['cart_return_source'] = "slider"
 
     
 
