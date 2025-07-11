@@ -1505,9 +1505,7 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         print("Ошибка при показе главного меню:", e)
     return msg
-async def show_cart_from_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["cart_return_source"] = "main_menu"
-    await show_cart(update, context)
+
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

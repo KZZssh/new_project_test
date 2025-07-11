@@ -117,7 +117,7 @@ async def main() -> None:
     application.add_handler(cart_plus_handler)
     application.add_handler(cart_minus_handler)
     application.add_handler(clear_cart_handler)
-    application.add_handler(CallbackQueryHandler(show_cart_from_main_menu, pattern="^back_from_cart$"))
+    
     
 
     application.add_handler(payment_confirmation_handler)
