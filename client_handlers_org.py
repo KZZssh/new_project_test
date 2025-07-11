@@ -998,7 +998,8 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)
 
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
-
+    kb = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")],
+          [InlineKeyboardButton("🛒 Корзина", callback_data="show_cart")]]
     if result:
         try:
             await query.message.delete()
@@ -1014,11 +1015,11 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
         context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id', subcat_id)
         context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id', brand_id)
 
-        await show_product_slider(update, context,
-            subcat_id=context.user_data['current_subcat_id'],
-            brand_id=context.user_data['current_brand_id'],
-            all_mode=context.user_data['all_mode']
-        )
+        #await show_product_slider(update, context,
+            #subcat_id=context.user_data['current_subcat_id'],
+            #brand_id=context.user_data['current_brand_id'],
+            #all_mode=context.user_data['all_mode']
+        #)
 
 
 
@@ -1546,6 +1547,6 @@ checkout_handler = ConversationHandler(
 
 reply_main_menu_handler = MessageHandler(
     filters.TEXT & filters.Regex("^Главное меню$"),
-    show_reply_main_menu  # <-- без скобок!
+    show_reply_main_menu 
 )
 back_to_main_menu_handler = CallbackQueryHandler(show_reply_main_menu , pattern= "back_to_main_menu")
