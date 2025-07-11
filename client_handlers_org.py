@@ -845,7 +845,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
     if update.callback_query.data == "cart":
             context.user_data['cart_return_source'] = "main_menu"
 
-    elif update.callback_query.data.startswith("add_to_cart"):
+    elif update.callback_query.data.startswith("add_"):
             context.user_data['cart_return_source'] = "slider"
 
     
