@@ -370,6 +370,13 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
     chat_id = query.message.chat_id if query.message else update.effective_chat.id
+    context.user_data['return_to_slider'] = {
+    'product_slider_page': context.user_data.get('product_slider_page', 0),
+    'all_mode': context.user_data.get('all_mode', True),
+    'current_subcat_id': subcat_id,
+    'current_brand_id': brand_id
+}
+
 
     if not file_id:
         await context.bot.send_message(chat_id=chat_id, text=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="MarkdownV2")
