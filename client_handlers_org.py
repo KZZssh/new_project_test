@@ -910,14 +910,6 @@ async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_T
     source = context.user_data.get("cart_return_source")
 
     if source == "slider":
-        slider_ctx = context.user_data.get('return_to_slider')
-        if slider_ctx:
-            context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
-            context.user_data['all_mode'] = slider_ctx.get('all_mode', True)
-            context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id')
-            context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id')
-
-            if source == "slider":
                 slider_ctx = context.user_data.get('return_to_slider')
                 if slider_ctx:
                     context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
@@ -931,8 +923,12 @@ async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_T
                         await show_product_slider(update, context, brand_id=context.user_data['current_brand_id'], subcat_id=context.user_data['current_subcat_id'])
                     return  # ← обязательно!
 
+    
+
+            
+
             # Любой другой случай — главное меню
-            await show_reply_main_menu(update, context, text="Вы вернулись из корзины.")
+    await show_reply_main_menu(update, context, text="Вы вернулись из корзины.")
 
 
 async def reply_cart_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1040,7 +1036,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     context.user_data['cart_return_source'] = "slider"
 
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
-    kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="back_from_cart")],
+    kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="cart")],
           [InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")]]
 
     if result:
@@ -1445,7 +1441,7 @@ def get_main_menu():
             [InlineKeyboardButton("Каталог 📦", callback_data="catalog")],
             [InlineKeyboardButton("Поиск товара 🔎", switch_inline_query_current_chat="")],
             [InlineKeyboardButton("История заказов 📒", callback_data="order_history")],
-            [InlineKeyboardButton("Корзина 🛒", callback_data="back_from_cart")],
+            [InlineKeyboardButton("Корзина 🛒", callback_data="cart")],
             [InlineKeyboardButton("Помощь ℹ️", callback_data="help")]
         ]
     ) 
@@ -1574,8 +1570,8 @@ choose_color_handler = CallbackQueryHandler(choose_color, pattern="^color_\\d+_\
 choose_size_handler = CallbackQueryHandler(choose_size, pattern="^size_\\d+_\\d+_\\d+$")
 back_to_slider_handler = CallbackQueryHandler(back_to_slider, pattern="^back_to_slider$")
 add_to_cart_handler = CallbackQueryHandler(add_to_cart_handler_func, pattern="^add_\\d+$")
-cart_handler = CallbackQueryHandler(back_from_cart_handler, pattern="^back_from_cart$")
-
+cart_back_handler = CallbackQueryHandler(back_from_cart_handler, pattern="^back_from_cart$")
+cart_handler = CallbackQueryHandler(show_cart, pattern="^cart$")
 cart_plus_handler = CallbackQueryHandler(cart_plus, pattern="^cart_plus_\\d+$")
 cart_minus_handler = CallbackQueryHandler(cart_minus, pattern="^cart_minus_\\d+$")
 clear_cart_handler = CallbackQueryHandler(clear_cart, pattern="^clear_cart$")
