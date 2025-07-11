@@ -587,10 +587,11 @@ async def report_combined(update, context):
 
 # --- Подтверждение заказа админом ---
 async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info(f"🔥 handle_admin_decision сработал — {query.data}")
+    
 
     query = update.callback_query
     await query.answer()
+    logging.info(f"🔥 handle_admin_decision сработал — {query.data}")
     parts = query.data.split('_')
     # Проверка что parts[2] — это число
     if len(parts) < 3 or not parts[2].isdigit():
