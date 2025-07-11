@@ -468,6 +468,7 @@ from telegram import InputMediaPhoto
 
 async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = getattr(update, "callback_query", None)
+    await query.answer() if query else None
 
     try:
         if query and query.data.startswith("details_"):
@@ -559,7 +560,7 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
         await safe_edit_or_send(update, md2("Нет доступных цветов для этого товара."), context=context)
         return
 
-    text = f"<b>{product['name']}</b>\n\n<i>{product['description']}</i>\n\nВыберите цвет:"
+    text = f"<b>{product['name']}</b>\n\n<blockquote>{product['description']}</blockquote>\n\nВыберите цвет:"
     keyboard = [[InlineKeyboardButton(f"{c['name']}", callback_data=f"color_{product_id}_{c['id']}")] for c in colors]
     keyboard.append([InlineKeyboardButton("◀️ К товарам", callback_data="back_to_slider")])
 
