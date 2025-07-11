@@ -843,10 +843,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
         await update.callback_query.answer()
 
 
-    if update.callback_query and update.callback_query.data == "back_from_cart":
-        context.user_data["cart_return_source"] = "main_menu"
-    elif update.callback_query and update.callback_query.data.startswith("slider_"):
-        context.user_data["cart_return_source"] = "slider"
+    
 
 
     kb_back = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")]]
@@ -920,21 +917,23 @@ async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_T
             context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id')
             context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id')
 
-            if context.user_data['all_mode']:
-                await show_product_slider(update, context, subcat_id=context.user_data['current_subcat_id'], all_mode=True)
-            else:
-                await show_product_slider(update, context, brand_id=context.user_data['current_brand_id'], subcat_id=context.user_data['current_subcat_id'])
-            
+            if source == "slider":
+                slider_ctx = context.user_data.get('return_to_slider')
+                if slider_ctx:
+                    context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
+                    context.user_data['all_mode'] = slider_ctx.get('all_mode', True)
+                    context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id')
+                    context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id')
 
-            if source == "main_menu":
-                await show_reply_main_menu(update, context, text="Вы вернулись из корзины.\nГлавное меню:")
-                return
-    # По умолчанию — назад в главное меню
-    await show_reply_main_menu(update, context)
+                    if context.user_data['all_mode']:
+                        await show_product_slider(update, context, subcat_id=context.user_data['current_subcat_id'], all_mode=True)
+                    else:
+                        await show_product_slider(update, context, brand_id=context.user_data['current_brand_id'], subcat_id=context.user_data['current_subcat_id'])
+                    return  # ← обязательно!
 
+            # Любой другой случай — главное меню
+            await show_reply_main_menu(update, context, text="Вы вернулись из корзины.")
 
-            
-        
 
 async def reply_cart_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -1460,7 +1459,9 @@ kb = ReplyKeyboardMarkup(keyboard=
 
 async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE , text="Главное меню\nвыберите действие:"):
     
-    context.user_data['cart_return_source'] = "main_menu"
+    if 'cart_return_source' not in context.user_data:
+        context.user_data['cart_return_source'] = "main_menu"
+
     """
     Универсально: вызывает главное меню как reply-клавиатуру.
     Автоматически определяет — edit, delete+send или просто send.
@@ -1508,6 +1509,10 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         print("Ошибка при показе главного меню:", e)
     return msg
+async def show_cart_from_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cart_return_source"] = "main_menu"
+    await show_cart(update, context)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "Добро пожаловать в наш магазин!"
