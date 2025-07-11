@@ -842,7 +842,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
     if update.callback_query:
         await update.callback_query.answer()
     data = update.callback_query.data if update.callback_query else None
-    if "cart_return_source" not in context.user_data:
+    if data:
         if data.startswith("add_"):
             context.user_data['cart_return_source'] = "slider"
         elif data == "cart":
