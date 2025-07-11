@@ -1041,7 +1041,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     context.user_data['cart_return_source'] = "slider"
 
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
-    kb = [[InlineKeyboardButton("🛒 Корзина", callback_data="cart")],
+    kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="back_from_cart")],
           [InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")]]
 
     if result:
