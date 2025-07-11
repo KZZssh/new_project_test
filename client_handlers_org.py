@@ -841,7 +841,12 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
 
     if update.callback_query:
         await update.callback_query.answer()
+    
+    if update.callback_query.data == "cart":
+            context.user_data['cart_return_source'] = "main_menu"
 
+    elif update.callback_query.data.startswith("add_to_cart"):
+            context.user_data['cart_return_source'] = "slider"
 
     
 
@@ -928,7 +933,7 @@ async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_T
             
 
             # Любой другой случай — главное меню
-    await show_reply_main_menu(update, context, text="Вы вернулись из корзины.")
+    await show_reply_main_menu(update, context )
 
 
 async def reply_cart_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
