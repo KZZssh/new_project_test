@@ -1434,7 +1434,7 @@ def get_main_menu():
             [InlineKeyboardButton("Каталог 📦", callback_data="catalog")],
             [InlineKeyboardButton("Поиск товара 🔎", switch_inline_query_current_chat="")],
             [InlineKeyboardButton("История заказов 📒", callback_data="order_history")],
-            [InlineKeyboardButton("Корзина 🛒", callback_data="cart")],
+            [InlineKeyboardButton("Корзина 🛒", callback_data="back_from_cart")],
             [InlineKeyboardButton("Помощь ℹ️", callback_data="help")]
         ]
     ) 
