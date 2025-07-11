@@ -867,7 +867,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
         text += f"\n<b>Итого:</b> <b>{total_price}₸</b>"
         keyboard.append([InlineKeyboardButton("🧾 Оформить заказ", callback_data="by_all")])
         keyboard.append([InlineKeyboardButton("🗑️ Очистить корзину", callback_data="clear_cart")])
-        keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu|back_to_slider")])
+        keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_from_cart")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
@@ -897,12 +897,35 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
             parse_mode=ParseMode.HTML,
             reply_markup=reply_markup
         )
+async def back_from_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    source = context.user_data.get("cart_return_source")
+
+    if source == "slider":
+        slider_ctx = context.user_data.get('return_to_slider')
+        if slider_ctx:
+            context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
+            context.user_data['all_mode'] = slider_ctx.get('all_mode', True)
+            context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id')
+            context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id')
+
+            if context.user_data['all_mode']:
+                await show_product_slider(update, context, subcat_id=context.user_data['current_subcat_id'], all_mode=True)
+            else:
+                await show_product_slider(update, context, brand_id=context.user_data['current_brand_id'], subcat_id=context.user_data['current_subcat_id'])
+            return
+
+    # По умолчанию — назад в главное меню
+    await show_reply_main_menu(update, context)
 
 
             
         
 
 async def reply_cart_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
     await show_cart(update, context, edit=False)
 
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -997,6 +1020,14 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     context.user_data['current_brand_id'] = brand_id or 1
     context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)
 
+
+    slider_ctx = context.user_data.get('return_to_slider', {})
+    context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
+    context.user_data['all_mode'] = slider_ctx.get('all_mode', True)
+    context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id', subcat_id)
+    context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id', brand_id)
+    context.user_data['cart_return_source'] = "slider"
+
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
     kb = [[InlineKeyboardButton("🛒 Корзина", callback_data="cart")],
           [InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")]]
@@ -1010,11 +1041,8 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
 
         await asyncio.sleep(1.3)
 
-        slider_ctx = context.user_data.get('return_to_slider', {})
-        context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
-        context.user_data['all_mode'] = slider_ctx.get('all_mode', True)
-        context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id', subcat_id)
-        context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id', brand_id)
+        
+
 
         #await show_product_slider(update, context,
             #subcat_id=context.user_data['current_subcat_id'],
@@ -1420,7 +1448,7 @@ kb = ReplyKeyboardMarkup(keyboard=
 
 async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE , text="Главное меню\nвыберите действие:"):
     
-    
+    context.user_data['cart_return_source'] = "main_menu"
     """
     Универсально: вызывает главное меню как reply-клавиатуру.
     Автоматически определяет — edit, delete+send или просто send.
@@ -1529,7 +1557,8 @@ choose_color_handler = CallbackQueryHandler(choose_color, pattern="^color_\\d+_\
 choose_size_handler = CallbackQueryHandler(choose_size, pattern="^size_\\d+_\\d+_\\d+$")
 back_to_slider_handler = CallbackQueryHandler(back_to_slider, pattern="^back_to_slider$")
 add_to_cart_handler = CallbackQueryHandler(add_to_cart_handler_func, pattern="^add_\\d+$")
-cart_handler = CallbackQueryHandler(show_cart, pattern="^cart$")
+cart_back_handler = CallbackQueryHandler(back_from_cart_handler, pattern="^back_from_cart$")
+
 cart_plus_handler = CallbackQueryHandler(cart_plus, pattern="^cart_plus_\\d+$")
 cart_minus_handler = CallbackQueryHandler(cart_minus, pattern="^cart_minus_\\d+$")
 clear_cart_handler = CallbackQueryHandler(clear_cart, pattern="^clear_cart$")
