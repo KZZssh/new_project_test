@@ -1433,9 +1433,10 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Ошибка при показе помощи:", e)
 
 
-def get_main_menu():
+async def get_main_menu(context: ContextTypes.DEFAULT_TYPE ):
     
-    
+    if 'cart_return_source' not in context.user_data:
+        context.user_data['cart_return_source'] = "main_menu"
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("Каталог 📦", callback_data="catalog")],
@@ -1475,7 +1476,8 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             # 1. Пробуем отредактировать текст (если сообщение поддерживает edit)
             try:
                 await update.callback_query.message.edit_text(
-                    text, reply_markup=get_main_menu()
+                    text, reply_markup=await get_main_menu(context=context),
+                    parse_mode=ParseMode.HTML
                 )
                 return
             except Exception:
@@ -1488,19 +1490,19 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             msg = await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=text,
-                reply_markup=get_main_menu()
+                reply_markup=await get_main_menu(context=context)
             )
         # Если это обычное сообщение (например, по команде /start)
         elif getattr(update, "message", None):
             msg = await update.message.reply_text(
-                text, reply_markup=get_main_menu()
+                text, reply_markup=await get_main_menu(context=context)
             )
         # Если вдруг передали только chat_id (редко, но удобно для рассылок)
         elif getattr(update, "effective_chat", None):
             msg = await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=text,
-                reply_markup=get_main_menu()
+                reply_markup=await get_main_menu(context=context)
             )
     except Exception as e:
         print("Ошибка при показе главного меню:", e)
