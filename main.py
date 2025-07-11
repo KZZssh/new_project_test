@@ -59,7 +59,7 @@ async def main() -> None:
     )
 
     # --- Барлық обработчиктерді тіркеу ---
-    application.add_handler(CallbackQueryHandler(debug_all_callback), group=999)
+    
     application.add_handler(CommandHandler("d" , d))
     application.add_handler(start_handler)
 
@@ -130,6 +130,8 @@ async def main() -> None:
     application.add_handler(help_handler)
     application.add_handler(reply_main_menu_handler)
     application.add_handler(back_to_main_menu_handler)
+    application.add_handler(CallbackQueryHandler(debug_all_callback, pattern=".*", block=False, group=999))
+
     
     
     # --- Тіркеудің соңы ---
