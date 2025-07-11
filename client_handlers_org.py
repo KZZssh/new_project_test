@@ -845,7 +845,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
     if "cart_return_source" not in context.user_data:
         if data.startswith("add_"):
             context.user_data['cart_return_source'] = "slider"
-    elif data == "cart":
+        elif data == "cart":
             context.user_data['cart_return_source'] = "main_menu"
 
     
