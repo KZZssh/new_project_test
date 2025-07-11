@@ -867,7 +867,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
         text += f"\n<b>Итого:</b> <b>{total_price}₸</b>"
         keyboard.append([InlineKeyboardButton("🧾 Оформить заказ", callback_data="by_all")])
         keyboard.append([InlineKeyboardButton("🗑️ Очистить корзину", callback_data="clear_cart")])
-        keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")])
+        keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu|back_to_slider")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
@@ -1005,7 +1005,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
             await query.message.delete()
         except Exception as e:
             print("❌ Не удалось удалить сообщение:", e)
-        await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!")
+        await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!" , reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
         await asyncio.sleep(1.3)
 
