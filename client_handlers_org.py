@@ -849,20 +849,13 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
     if update.callback_query:
         await update.callback_query.answer()
     data = update.callback_query.data if update.callback_query else None
-    if data:
-        if data.startswith("add_"):
+    if data and data.startswith("add_"):
+        if context.user_data.get('cart_return_source') is None:
             context.user_data['cart_return_source'] = "slider"
-        elif data == "cart":
-            if context.user_data.get('cart_return_source') != "slider":
-                context.user_data['cart_return_source'] = "main_menu"
 
 
 
-    
-
-
-    kb_back = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")]]
-    
+    kb_back = [[InlineKeyboardButton("◀ Назад", callback_data="back_from_cart")]]    
     if not cart:
         text = "🛒 Ваша корзина пуста."
         reply_markup = InlineKeyboardMarkup(kb_back)
@@ -1471,8 +1464,8 @@ kb = ReplyKeyboardMarkup(keyboard=
 
 async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE , text="Главное меню\nвыберите действие:"):
     
-    if 'cart_return_source' not in context.user_data:
-        context.user_data['cart_return_source'] = "main_menu"
+    context.user_data['cart_return_source'] = "main_menu"
+
 
     """
     Универсально: вызывает главное меню как reply-клавиатуру.
