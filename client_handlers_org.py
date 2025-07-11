@@ -1042,7 +1042,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
             print("❌ Не удалось удалить сообщение:", e)
         await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!" , reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
-        await asyncio.sleep(1.3)
+        await asyncio.sleep(0.5)  # Небольшая задержка перед возвратом к слайдеру
 
         
 
