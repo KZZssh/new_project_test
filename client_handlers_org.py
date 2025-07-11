@@ -998,8 +998,9 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)
 
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
-    kb = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")],
-          [InlineKeyboardButton("🛒 Корзина", callback_data="show_cart")]]
+    kb = [[InlineKeyboardButton("🛒 Корзина", callback_data="cart")],
+          [InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")]]
+
     if result:
         try:
             await query.message.delete()
