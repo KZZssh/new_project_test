@@ -931,7 +931,6 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data['cart'] = {}  # безопаснее, чем pop()
-    context.user_data['cart_return_source'] = "slider"  # сброс контекста возврата
     kb = [[InlineKeyboardButton("◀ Назад", callback_data="back_from_cart")]]
     await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена."), context , reply_markup=InlineKeyboardMarkup(kb))
 
@@ -1056,11 +1055,14 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
 async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    data = query.data.split('_')[0] if query.data else None
     cart = context.user_data.get("cart", {})
     if not isinstance(cart, dict) or not cart:
         await safe_edit_or_send(query, md2("🛒 Ваша корзина пуста.") , parse_mode="MarkdownV2")
         return ConversationHandler.END
     kb = [[InlineKeyboardButton(md2("❌ Отменить"), callback_data="cart")]]
+    if data == "cart":
+        return ConversationHandler.END
     await safe_edit_or_send(query, md2("Для оформления заказа, пожалуйста, введите ваше имя"), parse_mode="MarkdownV2", context=context , reply_markup=InlineKeyboardMarkup(kb))
     return ASK_NAME
 
