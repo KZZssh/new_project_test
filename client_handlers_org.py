@@ -741,17 +741,17 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     product = await fetchone("SELECT name FROM products WHERE id = ?", (product_id,))
     text = (
-        f"<b>{product['name']}</b>\n"
-        f"<b>Цвет</b>: {variant['color']}\n"
-        f"<b>Размер</b>: {variant['size']}\n"
-        f"<b>Цена</b>: {variant['price']}₸\n"
-        f"Осталось: {variant['quantity']} шт.\n\n"
+        f"<b><u>{product['name']}</u></b>\n"
+        f"<blockquote>Цвет: {variant['color']}</blockquote>\n"
+        f"<blockquote>Размер: {variant['size']}</blockquote>\n"
+        f"<b>Цена: {variant['price']}₸</b>\n"
+        f"<u>В наличии</u>: {variant['quantity']} шт.\n\n"
         f"Добавить этот вариант в корзину?"
     )
     keyboard = [
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
         [InlineKeyboardButton(md2("◀️ К размерам"), callback_data=f"color_{product_id}_{color_id}")],
-        [InlineKeyboardButton(md2("⏪ К товарам "), callback_data="back_to_slider")] ,
+        [InlineKeyboardButton(md2("⏪ К товарам "), callback_data="back_to_slider")],
         [InlineKeyboardButton(md2("🏚 Главное меню ") , callback_data="back_to_main_menu")]
     ]
     await safe_edit_or_send(query, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
@@ -859,7 +859,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
             item_total = item['price'] * item['quantity']
             total_price += item_total
 
-            text += f"• <b>{item['name']}</b> (x{item['quantity']}) - <b>{item_total}₸</b>\n"
+            text += f"• <blockquote>{item['name']} (x{item['quantity']}) - {item_total}₸></blockquote>\n"
 
             keyboard.append([
                 InlineKeyboardButton("➖", callback_data=f"cart_minus_{variant_id_str}"),
@@ -867,7 +867,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
                 InlineKeyboardButton("➕", callback_data=f"cart_plus_{variant_id_str}")
             ])
 
-        text += f"\n<b>Итого:</b> <b>{total_price}₸</b>"
+        text += f"\n<i>Итого:</i> <b>{total_price}₸</b>"
         keyboard.append([InlineKeyboardButton("🧾 Оформить заказ", callback_data="by_all")])
         keyboard.append([InlineKeyboardButton("🗑️ Очистить корзину", callback_data="clear_cart")])
         keyboard.append([InlineKeyboardButton("◀ Назад", callback_data="back_from_cart")])
@@ -936,7 +936,8 @@ async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data['cart'] = {}  # безопаснее, чем pop()
-    kb = [[InlineKeyboardButton("◀ Назад", callback_data="back_to_main_menu")]]
+    context.user_data['cart_return_source'] = "slider"  # сброс контекста возврата
+    kb = [[InlineKeyboardButton("◀ Назад", callback_data="back_from_cart")]]
     await safe_edit_or_send(query, md2("🛒 Ваша корзина очищена."), context , reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -1043,7 +1044,7 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
             print("❌ Не удалось удалить сообщение:", e)
         await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!" , reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
-        await asyncio.sleep(0.5)  # Небольшая задержка перед возвратом к слайдеру
+        await asyncio.sleep(0.1)  # Небольшая задержка перед возвратом к слайдеру
 
         
 
