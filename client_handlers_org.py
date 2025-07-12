@@ -1290,11 +1290,7 @@ async def cancel_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await safe_edit_or_send(query, md2("Оформление заказа отменено."), parse_mode="MarkdownV2", context=context)
     await asyncio.sleep(0.1) 
-    await show_product_slider(update, context,
-            subcat_id=context.user_data.get('current_subcat_id', None),
-            brand_id=context.user_data.get('current_brand_id', None),
-            all_mode=context.user_data.get('all_mode', False)
-        )
+    await back_from_cart_handler(update, context)
     context.user_data.clear()
     return ConversationHandler.END
 
