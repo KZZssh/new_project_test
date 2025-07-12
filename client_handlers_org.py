@@ -741,7 +741,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     product = await fetchone("SELECT name FROM products WHERE id = ?", (product_id,))
     text = (
-        f"<b>{product['name']}</b>\n \n<blockquote>Цвет:{variant['color']}                         \nРазмер: {variant['size']}                         \nЦена: {variant['price']}₸                         \nВ наличии: {variant['quantity']} шт.</blockquote>                        \n\n"
+        f"<b>{product['name']}</b>\n \n<blockquote>Цвет: {variant['color']}                         \nРазмер: {variant['size']}                         \nЦена: {variant['price']}₸                         \nВ наличии: {variant['quantity']} шт.</blockquote>                        \n\n"
     )
     keyboard = [
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
@@ -845,7 +845,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
         reply_markup = InlineKeyboardMarkup(kb_back)
     else:
         text_raw = "🛒 Ваша корзина:\n\n"
-        text = f"<b>{text_raw}</b>"
+        text = f"<i>{text_raw}</i>"
 
         total_price = 0
         keyboard = []
@@ -1060,7 +1060,8 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not isinstance(cart, dict) or not cart:
         await safe_edit_or_send(query, md2("🛒 Ваша корзина пуста.") , parse_mode="MarkdownV2")
         return ConversationHandler.END
-    await safe_edit_or_send(query, md2("Для оформления заказа, пожалуйста, введите ваше имя"), parse_mode="MarkdownV2", context=context)
+    kb = [[InlineKeyboardButton(md2("❌ Отменить"), callback_data="cart")]]
+    await safe_edit_or_send(query, md2("Для оформления заказа, пожалуйста, введите ваше имя"), parse_mode="MarkdownV2", context=context , reply_markup=InlineKeyboardMarkup(kb))
     return ASK_NAME
 
 async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
