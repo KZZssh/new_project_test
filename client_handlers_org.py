@@ -741,12 +741,8 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     product = await fetchone("SELECT name FROM products WHERE id = ?", (product_id,))
     text = (
-        f"<b><u>{product['name']}</u></b>\n"
-        f"<blockquote>Цвет: {variant['color']}</blockquote>\n"
-        f"<blockquote>Размер: {variant['size']}</blockquote>\n"
-        f"<b>Цена: {variant['price']}₸</b>\n"
-        f"<u>В наличии</u>: {variant['quantity']} шт.\n\n"
-        f"Добавить этот вариант в корзину?"
+        f"<u>{product['name']}</u>\n \n<blockquote><u>Цвет:{variant['color']}\nРазмер: {variant['size']}\nЦена? {variant['price']}₸\nВ наличии:{variant['quantity']}</u></blockquote>\n"
+        
     )
     keyboard = [
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
