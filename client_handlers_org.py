@@ -1288,10 +1288,9 @@ async def cancel_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    await safe_edit_or_send(query, md2("Оформление заказа отменено."), parse_mode="MarkdownV2", context=context)
+    
     await asyncio.sleep(0.1) 
     await back_from_cart_handler(update, context)
-    context.user_data.clear()
     return ConversationHandler.END
 
 
