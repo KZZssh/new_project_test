@@ -1061,10 +1061,9 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_edit_or_send(query, md2("🛒 Ваша корзина пуста.") , parse_mode="MarkdownV2")
         return ConversationHandler.END
     kb = [[InlineKeyboardButton(md2("❌ Отменить"), callback_data="cancel_checkout")],]
-    kb.append([InlineKeyboardButton(md2("◀️ Назад"), callback_data="back_from_cart")])
+    
     context.user_data['checkout_cart'] = cart  # Сохраняем корзину для дальнейшего использования
-    context.user_data['checkout_step'] = "name"  # Сохраняем текущий шаг оформления заказа
-    context.user_data['checkout_name'] = None
+   
     await safe_edit_or_send(query, md2("Для оформления заказа, пожалуйста, введите ваше имя"), parse_mode="MarkdownV2", context=context , reply_markup=InlineKeyboardMarkup(kb))
     return ASK_NAME
 
