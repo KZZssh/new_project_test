@@ -1060,9 +1060,11 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not isinstance(cart, dict) or not cart:
         await safe_edit_or_send(query, md2("🛒 Ваша корзина пуста.") , parse_mode="MarkdownV2")
         return ConversationHandler.END
-    kb = [[InlineKeyboardButton(md2("❌ Отменить"), callback_data="cart")]]
-    if data == "cart":
-        return ConversationHandler.END
+    kb = [[InlineKeyboardButton(md2("❌ Отменить"), callback_data="cancel_checkout")],]
+    kb.append([InlineKeyboardButton(md2("◀️ Назад"), callback_data="back_from_cart")])
+    context.user_data['checkout_cart'] = cart  # Сохраняем корзину для дальнейшего использования
+    context.user_data['checkout_step'] = "name"  # Сохраняем текущий шаг оформления заказа
+    context.user_data['checkout_name'] = None
     await safe_edit_or_send(query, md2("Для оформления заказа, пожалуйста, введите ваше имя"), parse_mode="MarkdownV2", context=context , reply_markup=InlineKeyboardMarkup(kb))
     return ASK_NAME
 
@@ -1284,7 +1286,18 @@ async def payment_confirmation(update: Update, context: ContextTypes.DEFAULT_TYP
     await safe_edit_or_send(query, md2("Спасибо! Ваш заказ принят в обработку! Ожидайте подтверждения от менеджера"), parse_mode="MarkdownV2", context=context)
 
 async def cancel_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(md2("Оформление заказа отменено."), parse_mode="MarkdownV2")
+    query = update.callback_query
+    await query.answer()
+    if query.message:
+        await query.message.reply_text(md2("Оформление заказа отменено."), parse_mode="MarkdownV2")
+    else:
+        await safe_edit_or_send(query, md2("Оформление заказа отменено."), parse_mode="MarkdownV2", context=context)
+        await asyncio.sleep(0.1) 
+        await show_product_slider(update, context,
+            subcat_id=context.user_data.get('current_subcat_id', None),
+            brand_id=context.user_data.get('current_brand_id', None),
+            all_mode=context.user_data.get('all_mode', False)
+        )
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -1579,7 +1592,8 @@ checkout_handler = ConversationHandler(
         ASK_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_address)],
         ASK_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
     },
-    fallbacks=[CommandHandler("cancel", cancel_checkout)],
+    fallbacks=[CommandHandler("cancel", cancel_checkout) , 
+               CallbackQueryHandler(cancel_checkout, pattern="^cancel_checkout$")],
     per_user=True, per_chat=True
 )
 
