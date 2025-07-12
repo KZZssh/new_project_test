@@ -560,7 +560,7 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
         await safe_edit_or_send(update, md2("Нет доступных цветов для этого товара."), context=context)
         return
 
-    text = f"<b>{product['name']}</b>\n\n<blockquote>{product['description']}</blockquote>\n\nВыберите цвет:"
+    text = f"<b>{product['name']}</b>\n\n<pre><i>{product['description']}</i></pre>\n\nВыберите цвет:"
     keyboard = [[InlineKeyboardButton(f"{c['name']}", callback_data=f"color_{product_id}_{c['id']}")] for c in colors]
     keyboard.append([InlineKeyboardButton("◀️ К товарам", callback_data="back_to_slider")])
 
@@ -854,7 +854,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
             item_total = item['price'] * item['quantity']
             total_price += item_total
 
-            text += f"• <blockquote>{item['name']} (x{item['quantity']}) - {item_total}₸></blockquote>\n"
+            text += f" <pre>{item['name']} (x{item['quantity']}) - {item_total}₸</pre>\n"
 
             keyboard.append([
                 InlineKeyboardButton("➖", callback_data=f"cart_minus_{variant_id_str}"),
