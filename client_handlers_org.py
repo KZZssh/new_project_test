@@ -534,13 +534,18 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
                     context.user_data['product_slider_page'] = i
                     break
 
-    # 💾 Сохраняем контекст слайдера
-    context.user_data['return_to_slider'] = {
-        'product_slider_page': context.user_data.get('product_slider_page', 0),
-        'all_mode': context.user_data.get('all_mode', False),
-        'current_subcat_id': context.user_data.get('current_subcat_id'),
-        'current_brand_id': context.user_data.get('current_brand_id')
-    }
+        # 💾 Сохраняем контекст слайдера ТОЛЬКО если есть все нужные данные
+        if context.user_data.get('current_subcat_id') is not None and context.user_data.get('current_brand_id') is not None:
+            context.user_data['return_to_slider'] = {
+                'product_slider_page': context.user_data.get('product_slider_page', 0),
+                'all_mode': context.user_data.get('all_mode', False),
+                'current_subcat_id': context.user_data['current_subcat_id'],
+                'current_brand_id': context.user_data['current_brand_id']
+            }
+        else:
+            # 🧹 Если нет полного контекста — сбрасываем старое
+            context.user_data.pop('return_to_slider', None)
+
 
     # Получаем товар
     product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
@@ -765,7 +770,7 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE, sub
     subcat_id = context.user_data['current_subcat_id']
     brand_id = context.user_data['current_brand_id']
 
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.1)
 
     if all_mode:
         await show_product_slider(update, context, subcat_id=subcat_id, all_mode=True)
