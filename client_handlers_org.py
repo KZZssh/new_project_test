@@ -470,16 +470,26 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
     query = getattr(update, "callback_query", None)
     await query.answer() if query else None
 
-    try:
-        if query and query.data.startswith("details_"):
-            parts = query.data.split('_')
+    product_id = None
+    from_inline = False
+
+    if query and query.data.startswith("details_"):
+        parts = query.data.split('_')
+        if len(parts) == 4:
             product_id = int(parts[1])
-            if len(parts) == 4:
-                context.user_data['current_subcat_id'] = int(parts[2])
-                context.user_data['current_brand_id'] = int(parts[3])
+            subcat_id = int(parts[2])
+            brand_id = int(parts[3])
+
+            # 🧼 Чистим user_data и создаём fresh inline контекст
+            context.user_data.clear()
+            context.user_data['current_product_id'] = product_id
+            context.user_data['current_subcat_id'] = subcat_id
+            context.user_data['current_brand_id'] = None  # inline не даёт бренд
+            context.user_data['all_mode'] = True
+            from_inline = True
         else:
-            product_id = context.user_data.get("current_product_id")
-    except Exception:
+            product_id = int(parts[1])
+    else:
         product_id = context.user_data.get("current_product_id")
 
     if not product_id:
@@ -488,99 +498,63 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
     context.user_data['current_product_id'] = product_id
 
-    # Получаем недостающие данные subcat/brand/category
-    if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
-        info = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_id,))
-        if info:
-            context.user_data['current_subcat_id'] = info['sub_category_id']
-            context.user_data['current_brand_id'] = info['brand_id']
-            result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (info['sub_category_id'],))
-            if result:
-                context.user_data['current_category_id'] = result['category_id']
-
-    if 'all_mode' not in context.user_data:
-    # Если зашли из inline (нет истории), включаем all_mode
-        context.user_data['all_mode'] = True
-    else:
+    # 🧠 Дополняем недостающие поля (если не из inline)
+    if not from_inline:
+        if 'current_subcat_id' not in context.user_data or 'current_brand_id' not in context.user_data:
+            info = await fetchone("SELECT sub_category_id, brand_id FROM products WHERE id = ?", (product_id,))
+            if info:
+                context.user_data['current_subcat_id'] = info['sub_category_id']
+                context.user_data['current_brand_id'] = info['brand_id']
+                result = await fetchone("SELECT category_id FROM sub_categories WHERE id = ?", (info['sub_category_id'],))
+                if result:
+                    context.user_data['current_category_id'] = result['category_id']
         context.user_data['all_mode'] = context.user_data.get('all_mode', False)
 
-    
-    # 🧠 Вычисляем product_slider_page если его ещё нет
-    if 'product_slider_page' not in context.user_data or context.user_data['product_slider_page'] == 0:
-        subcat_id = context.user_data.get('current_subcat_id')
-        brand_id = context.user_data.get('current_brand_id')
-        all_mode = context.user_data['all_mode']
+    # 🔁 Строим слайдер из списка товаров и определяем текущую позицию
+    subcat_id = context.user_data.get('current_subcat_id')
+    brand_id = context.user_data.get('current_brand_id')
+    all_mode = context.user_data.get('all_mode', False)
 
-        if subcat_id:
-            if all_mode:
-                product_list = await fetchall("""
-                    SELECT p.id FROM products p
-                    JOIN product_variants pv ON p.id = pv.product_id
-                    WHERE p.sub_category_id = ? AND pv.quantity > 0
-                    GROUP BY p.id
-                    ORDER BY MIN(pv.price)
-                """, (subcat_id,))
-            else:
-                product_list = await fetchall("""
-                    SELECT p.id FROM products p
-                    JOIN product_variants pv ON p.id = pv.product_id
-                    WHERE p.sub_category_id = ? AND p.brand_id = ? AND pv.quantity > 0
-                    GROUP BY p.id
-                    ORDER BY MIN(pv.price)
-                """, (subcat_id, brand_id))
+    slider_page = None
+    if subcat_id:
+        if all_mode:
+            product_list = await fetchall("""
+                SELECT p.id FROM products p
+                JOIN product_variants pv ON p.id = pv.product_id
+                WHERE p.sub_category_id = ? AND pv.quantity > 0
+                GROUP BY p.id
+                ORDER BY MIN(pv.price)
+            """, (subcat_id,))
+        else:
+            product_list = await fetchall("""
+                SELECT p.id FROM products p
+                JOIN product_variants pv ON p.id = pv.product_id
+                WHERE p.sub_category_id = ? AND p.brand_id = ? AND pv.quantity > 0
+                GROUP BY p.id
+                ORDER BY MIN(pv.price)
+            """, (subcat_id, brand_id))
 
-            for i, item in enumerate(product_list):
-                if item['id'] == product_id:
-                    context.user_data['product_slider_page'] = i
-                    break
+        for i, item in enumerate(product_list):
+            if item['id'] == product_id:
+                slider_page = i
+                context.user_data['product_slider_page'] = i
+                break
 
-        # 💾 Контекст слайдера
-        subcat_id = context.user_data.get('current_subcat_id')
-        brand_id = context.user_data.get('current_brand_id')
-        all_mode = context.user_data.get('all_mode', False)
-        slider_page = None
+    if slider_page is not None:
+        context.user_data['return_to_slider'] = {
+            'product_slider_page': slider_page,
+            'all_mode': all_mode,
+            'current_subcat_id': subcat_id,
+            'current_brand_id': brand_id
+        }
 
-        if subcat_id:
-            if all_mode:
-                product_list = await fetchall("""
-                    SELECT p.id FROM products p
-                    JOIN product_variants pv ON p.id = pv.product_id
-                    WHERE p.sub_category_id = ? AND pv.quantity > 0
-                    GROUP BY p.id
-                    ORDER BY MIN(pv.price)
-                """, (subcat_id,))
-            else:
-                product_list = await fetchall("""
-                    SELECT p.id FROM products p
-                    JOIN product_variants pv ON p.id = pv.product_id
-                    WHERE p.sub_category_id = ? AND p.brand_id = ? AND pv.quantity > 0
-                    GROUP BY p.id
-                    ORDER BY MIN(pv.price)
-                """, (subcat_id, brand_id))
-
-            for i, item in enumerate(product_list):
-                if item['id'] == product_id:
-                    slider_page = i
-                    context.user_data['product_slider_page'] = i
-                    break
-
-            # 💾 Сохраняем return_to_slider только если нашли товар в списке
-            if slider_page is not None:
-                context.user_data['return_to_slider'] = {
-                    'product_slider_page': slider_page,
-                    'all_mode': all_mode,
-                    'current_subcat_id': subcat_id,
-                    'current_brand_id': brand_id
-                }
-
-
-    # Получаем товар
+    # 📦 Получаем товар
     product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
     if not product:
         await update.message.reply_text("❌ Товар не найден.")
         return
 
-    # Достаём доступные цвета
+    # 🎨 Цвета
     colors = await fetchall("""
         SELECT DISTINCT c.id, c.name
         FROM product_variants pv
@@ -597,6 +571,7 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard.append([InlineKeyboardButton("◀️ К товарам", callback_data="back_to_slider")])
 
     await safe_edit_or_send(query or update, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML, context=context)
+
 
 async def get_color_media(product_id, color_id):
     # Получаем все variant_id для этого товара и цвета
