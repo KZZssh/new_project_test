@@ -574,7 +574,7 @@ async def ask_orders_report_period(update, context):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-from bee import fetch_orders_report, prepare_orders_report_data, export_orders_to_gsheet, download_xlsx, STATUS_MAP, PERIODS
+from bee import fetch_orders_report, prepare_orders_report_data, export_orders_to_gsheet, download_xlsx, STATUS_MAP
 
 async def handle_orders_report_period(update, context):
     query = update.callback_query
