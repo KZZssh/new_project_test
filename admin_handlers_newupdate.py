@@ -343,6 +343,20 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                             result = await upload_resp.json()
                             photo_url = result["url"]
                             logging.info(f"✅ Загружено на Flask: {photo_url}")
+
+                            # Проверка: если order == 0, но уже есть фото с таким order — меняем
+                            if order == 0:
+                                existing = await fetchone(
+                                    "SELECT COUNT(*) as cnt FROM product_media WHERE variant_id = ? AND \"order\" = 0",
+                                    (variant_id,)
+                                )
+                                if existing and existing["cnt"] > 0:
+                                    max_order_row = await fetchone(
+                                        "SELECT MAX(\"order\") as max_order FROM product_media WHERE variant_id = ?",
+                                        (variant_id,)
+                                    )
+                                    order = (max_order_row["max_order"] or 0) + 1
+
                             # Сохраняем в БД
                             await execute(
                                 "INSERT INTO product_media (variant_id, file_id, url, is_video, \"order\") VALUES (?, ?, ?, ?, ?)",
