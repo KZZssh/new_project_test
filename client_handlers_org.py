@@ -1330,7 +1330,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        SELECT pm.url
                        FROM product_variants pv2
                        JOIN product_media pm ON pm.variant_id = pv2.id
-                       WHERE pv2.product_id = p.id AND pm.is_video = 0
+                       WHERE pv2.product_id = p.id AND pm.is_video = 0 AND pm.url IS NOT NULL
                        ORDER BY pm."order" ASC LIMIT 1
                    ) AS photo_url
             FROM products p
@@ -1354,7 +1354,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        SELECT pm.url
                        FROM product_variants pv2
                        JOIN product_media pm ON pm.variant_id = pv2.id
-                       WHERE pv2.product_id = p.id AND pm.is_video = 0
+                       WHERE pv2.product_id = p.id AND pm.is_video = 0 AND pm.url IS NOT NULL
                        ORDER BY pm."order" ASC LIMIT 1
                    ) AS photo_url
             FROM products p
@@ -1382,7 +1382,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         thumb_url = p["photo_url"]
 
         subcat_id = p['sub_category_id'] or 0
-        brand_id = p['brand_id'] or 0   
+        brand_id = p['brand_id'] or 0
 
         message = (
             f"<b>{name}</b>\n\n"
@@ -1409,6 +1409,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results.append(result)
 
     await update.inline_query.answer(results, cache_time=1)
+
 
 
 
