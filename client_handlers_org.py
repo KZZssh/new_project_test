@@ -741,7 +741,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     product = await fetchone("SELECT name FROM products WHERE id = ?", (product_id,))
     text = (
-        f"<b>{product['name']}</b>\n \n<blockquote>Цвет: {variant['color']}                         \nРазмер: {variant['size']}                         \nЦена: {variant['price']}₸                         \nВ наличии: {variant['quantity']} шт.</blockquote>                        \n\n"
+        f"<b>{product['name']}</b>\n \n<i>Цвет:</i> <b><i>{variant['color']}</i></b>\n<i>Размер:</i> <b><i>{variant['size']}</i></b>\n<i>Цена:</i> <b><i>{variant['price']}₸</i></b>\n<i>В наличии:</i> <b><i>{variant['quantity']} шт.</i></b>\n\n"
     )
     keyboard = [
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
@@ -854,7 +854,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
             item_total = item['price'] * item['quantity']
             total_price += item_total
 
-            text += f" <blockquote>{item['name']} (x{item['quantity']}) - {item_total}₸</blockquote>\n"
+            text += f" <b>{item['name']} (x{item['quantity']}) - {item_total}₸</b>\n\n"
 
             keyboard.append([
                 InlineKeyboardButton("➖", callback_data=f"cart_minus_{variant_id_str}"),
