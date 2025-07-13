@@ -19,8 +19,12 @@ GOOGLE_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edi
 
 STATUS_MAP = {
     "confirmed": "Подтвержден",
-    "pending": "В ожидании",
-    "rejected": "Отклонен",
+    "pending_payment": "В ожидании оплаты",
+    "rejected": "Отклонен", 
+    "preparing": "В обработке",
+    "shipped": "Отправлен",
+    "delivered": "Доставлен",
+    "cancelled_by_client": "Отменен клиентом",
     None: "Неизвестен"
 }
 
@@ -206,7 +210,63 @@ def make_orders_report_text(orders, period: str):
         total_count += total_qty
     lines.append(f"\nВсего заказов: {len(orders)}\nВсего единиц товаров: {total_count}\nОбщая сумма: {round(total_sum)}₸")
     return "\n".join(lines)
+def prepare_orders_report_data(orders, period: str):
+    data = [["ID", "Имя", "Адрес", "Телефон", "Статус", "Дата", "Сумма", "Кол-во товаров", "Состав корзины"]]
+    if not orders:
+        return data + [["", "", "", "", "", "", "", "", f"Нет заказов за период: {period}"]]
+    for o in orders:
+        oid, uname, addr, phone, cart_json, total, status, created = o
+        try:
+            cart = json.loads(cart_json)
+        except Exception:
+            cart = {}
+        total_qty = sum(item.get("quantity", 0) for item in cart.values())
+        items_str = "; ".join(f'{item["name"]} x{item["quantity"]}' for item in cart.values())
+        rus_status = STATUS_MAP.get(status, "Неизвестен")
+        data.append([
+            oid, uname, addr, phone, rus_status,
+            created[:16], round(total), total_qty, items_str
+        ])
+    return data
 
+
+def export_orders_to_gsheet(data, sheet_title="отчет по заказам"):
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=[
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ])
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+    try:
+        worksheet = spreadsheet.worksheet(sheet_title)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=sheet_title, rows="500", cols="20")
+
+    worksheet.clear()
+    worksheet.append_rows(data)
+    sheet_id = worksheet._properties['sheetId']
+
+    spreadsheet.batch_update([{
+        "requests": [{
+            "updateDimensionProperties": {
+                "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 9},
+                "properties": {"pixelSize": 200},
+                "fields": "pixelSize"
+            }
+        }]
+    }, {
+        "requests": [{
+            "repeatCell": {
+                "range": {"sheetId": sheet_id},
+                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
+                "fields": "userEnteredFormat.wrapStrategy"
+            }
+        }]
+    }])
+    return f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit#gid={sheet_id}"
+
+
+    
 if __name__ == "__main__":
     data = fetch_products_detailed()
     # Для отладки — распечатаем данные

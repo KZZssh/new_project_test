@@ -558,7 +558,6 @@ PERIODS = {
     "30days": "последние 30 дней"
 }
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 async def ask_orders_report_period(update, context):
     keyboard = [
@@ -575,6 +574,8 @@ async def ask_orders_report_period(update, context):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+from bee import fetch_orders_report, prepare_orders_report_data, export_orders_to_gsheet, download_xlsx, STATUS_MAP, PERIODS
+
 async def handle_orders_report_period(update, context):
     query = update.callback_query
     await query.answer()
@@ -589,9 +590,34 @@ async def handle_orders_report_period(update, context):
     if not period:
         await query.edit_message_text("Некорректный период.")
         return
+
+    await query.edit_message_text("📊 Генерирую .xlsx-отчёт по заказам...")
+
+    # 1. Получаем данные
     orders = fetch_orders_report(period)
-    text = make_orders_report_text(orders, PERIODS[period])
-    await query.edit_message_text(text)
+    data = prepare_orders_report_data(orders, PERIODS[period])
+
+    # 2. Экспортируем в Google Sheet
+    sheet_url = export_orders_to_gsheet(data, f"заказы_{period}")
+
+    # 3. Пытаемся скачать .xlsx
+    xlsx_file = download_xlsx()
+    if xlsx_file:
+        with open(xlsx_file, "rb") as f:
+            await query.message.reply_document(
+                document=f,
+                filename=f"orders_report_{period}.xlsx",
+                caption=f"📄 Отчёт за {PERIODS[period]} (.xlsx)"
+            )
+    else:
+        await query.message.reply_text("⚠️ Не удалось скачать Excel-файл. Проверьте права доступа.")
+
+    # 4. Ссылка
+    await query.message.reply_text(
+        f"<b>Ссылка на Google Таблицу:</b>\n<a href='{sheet_url}'>Открыть отчёт</a>",
+        parse_mode=ParseMode.HTML
+    )
+
 
 
 async def report_combined(update, context):
