@@ -1327,10 +1327,11 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    b.name AS brand,
                    MIN(pv.price) AS min_price,
                    (
-                       SELECT photo_url
+                       SELECT pm.url
                        FROM product_variants pv2
-                       WHERE pv2.product_id = p.id AND pv2.photo_url IS NOT NULL
-                       ORDER BY pv2.id ASC LIMIT 1
+                       JOIN product_media pm ON pm.variant_id = pv2.id
+                       WHERE pv2.product_id = p.id AND pm.is_video = 0
+                       ORDER BY pm."order" ASC LIMIT 1
                    ) AS photo_url
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
@@ -1350,10 +1351,11 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    b.name AS brand,
                    MIN(pv.price) AS min_price,
                    (
-                       SELECT photo_url
+                       SELECT pm.url
                        FROM product_variants pv2
-                       WHERE pv2.product_id = p.id AND pv2.photo_url IS NOT NULL
-                       ORDER BY pv2.id ASC LIMIT 1
+                       JOIN product_media pm ON pm.variant_id = pv2.id
+                       WHERE pv2.product_id = p.id AND pm.is_video = 0
+                       ORDER BY pm."order" ASC LIMIT 1
                    ) AS photo_url
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
