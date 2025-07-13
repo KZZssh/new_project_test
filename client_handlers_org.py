@@ -1350,13 +1350,17 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    sc.name AS subcategory,
                    b.name AS brand,
                    MIN(pv.price) AS min_price,
-                   (
-                       SELECT pm.url
-                       FROM product_variants pv2
-                       JOIN product_media pm ON pm.variant_id = pv2.id
-                       WHERE pv2.product_id = p.id AND pm.is_video = 0 AND pm.url IS NOT NULL
-                       ORDER BY pm."order" ASC LIMIT 1
-                   ) AS photo_url
+                    (
+                    SELECT pm.url
+                    FROM product_media pm
+                    JOIN product_variants pv2 ON pv2.id = pm.variant_id
+                    WHERE pv2.product_id = p.id
+                    AND pm.is_video = 0
+                    AND pm.url IS NOT NULL
+                    ORDER BY pm.id ASC
+                    LIMIT 1
+                    ) AS photo_url
+
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
