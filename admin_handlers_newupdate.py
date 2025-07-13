@@ -574,7 +574,7 @@ async def ask_orders_report_period(update, context):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-from bee import fetch_orders_report, prepare_orders_report_data, export_orders_to_gsheet, download_xlsx, STATUS_MAP
+from bee import prepare_orders_data_for_gsheet, export_orders_to_gsheet, download_xlsx
 
 async def handle_orders_report_period(update, context):
     query = update.callback_query
@@ -591,32 +591,39 @@ async def handle_orders_report_period(update, context):
         await query.edit_message_text("Некорректный период.")
         return
 
-    await query.edit_message_text("📊 Генерирую .xlsx-отчёт по заказам...")
+    await query.edit_message_text("Генерирую отчёт по заказам, подождите...")
 
-    # 1. Получаем данные
-    orders = fetch_orders_report(period)
-    data = prepare_orders_report_data(orders, PERIODS[period])
+    # Генерация данных
+    data = prepare_orders_data_for_gsheet(period)
+    if len(data) == 1:
+        await query.edit_message_text("❗️Заказов за выбранный период не найдено.")
+        return
 
-    # 2. Экспортируем в Google Sheet
+    # Экспорт
     sheet_url = export_orders_to_gsheet(data, f"заказы_{period}")
-
-    # 3. Пытаемся скачать .xlsx
     xlsx_file = download_xlsx()
+
+    # Отправка ссылки
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"📊 Отчёт по заказам за {PERIODS[period]}:\n{sheet_url}"
+    )
+
+    # Отправка файла
     if xlsx_file:
         with open(xlsx_file, "rb") as f:
-            await query.message.reply_document(
+            await context.bot.send_document(
+                chat_id=query.message.chat_id,
                 document=f,
-                filename=f"orders_report_{period}.xlsx",
-                caption=f"📄 Отчёт за {PERIODS[period]} (.xlsx)"
+                filename=f"orders_{period}.xlsx",
+                caption="Отчёт по заказам (.xlsx)"
             )
     else:
-        await query.message.reply_text("⚠️ Не удалось скачать Excel-файл. Проверьте права доступа.")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="⚠️ Не удалось скачать .xlsx-файл. Проверьте доступы к Google Sheets."
+        )
 
-    # 4. Ссылка
-    await query.message.reply_text(
-        f"<b>Ссылка на Google Таблицу:</b>\n<a href='{sheet_url}'>Открыть отчёт</a>",
-        parse_mode=ParseMode.HTML
-    )
 
 
 

@@ -229,6 +229,22 @@ def prepare_orders_report_data(orders, period: str):
         ])
     return data
 
+def prepare_orders_data_for_gsheet(period: str):
+    orders = fetch_orders_report(period)
+    data = [["ID", "Имя", "Телефон", "Адрес", "Статус", "Дата", "Товары", "Итог (₸)", "Кол-во товаров"]]
+    for o in orders:
+        oid, uname, addr, phone, cart_json, total, status, created = o
+        try:
+            cart = json.loads(cart_json)
+        except:
+            cart = {}
+        items_str = "; ".join(f'{item["name"]} x{item["quantity"]}' for item in cart.values())
+        total_qty = sum(item.get("quantity", 0) for item in cart.values())
+        rus_status = STATUS_MAP.get(status, "Неизвестен")
+        data.append([oid, uname, phone, addr, rus_status, created[:16], items_str, round(total), total_qty])
+    return data
+
+
 
 def export_orders_to_gsheet(data, sheet_name):
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=[
@@ -237,11 +253,7 @@ def export_orders_to_gsheet(data, sheet_name):
     ])
     client = gspread.authorize(creds)
 
-    try:
-        spreadsheet = client.open(SPREADSHEET_NAME)
-    except gspread.exceptions.SpreadsheetNotFound:
-        spreadsheet = client.create(SPREADSHEET_NAME)
-        spreadsheet.share(creds.service_account_email, perm_type='user', role='writer')
+    spreadsheet = client.open(SPREADSHEET_NAME)
 
     try:
         worksheet = spreadsheet.worksheet(sheet_name)
