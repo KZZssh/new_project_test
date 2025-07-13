@@ -1,0 +1,28 @@
+# Системные файлы Docker и Fly.io
+.dockerignore
+Dockerfile
+fly.toml
+
+# Базы данных и сессии
+# Они хранятся на постоянном томе на сервере
+/data/
+shop.db
+# Логи и временные файлы
+*.log
+bot_data.pkl
+*.db
+*.db-journal
+
+# Отчеты и временные файлы
+*.xlsx
+*.pkl
+
+# Виртуальное окружение Python
+venv/
+.venv/
+
+# Системные папки IDE и ОС
+.idea/
+.vscode/
+__pycache__/
+.DS_Store
