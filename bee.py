@@ -90,6 +90,8 @@ def export_to_gsheet(data):
     except gspread.exceptions.SpreadsheetNotFound:
         spreadsheet = client.create(SPREADSHEET_NAME)
         spreadsheet.share(creds.service_account_email, perm_type='user', role='writer')
+        spreadsheet.share(None, perm_type='anyone', role='reader')  # разрешает всем доступ
+
 
     # Получаем или создаём нужный лист
     try:
@@ -143,6 +145,9 @@ def export_to_gsheet(data):
     })
 
     print("✅ Размеры столбцов выставлены, перенос текста включён!")
+
+
+
 
 def get_gsheet_url():
     return GOOGLE_SHEET_URL
@@ -259,6 +264,7 @@ def export_orders_to_gsheet(data, sheet_title):
     # 🔄 Создаём отдельный файл под этот отчёт
     spreadsheet = client.create(sheet_title)
     spreadsheet.share(creds.service_account_email, perm_type='user', role='writer')
+    
 
     worksheet = spreadsheet.sheet1
     worksheet.update_title(sheet_title)
@@ -286,6 +292,8 @@ def export_orders_to_gsheet(data, sheet_title):
     })
 
     sheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet.id}/edit#gid={sheet_id}"
+    
+
     return spreadsheet.id, sheet_url
 
 
