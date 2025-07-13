@@ -1314,6 +1314,7 @@ def escape_html(text: str) -> str:
 
 from telegram import InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 
+
 async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_text = update.inline_query.query.strip()
 
@@ -1325,14 +1326,19 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    sc.name AS subcategory,
                    b.name AS brand,
                    MIN(pv.price) AS min_price,
-                   MAX(pv.photo_url) AS photo_url
+                   (
+                       SELECT photo_url
+                       FROM product_variants pv2
+                       WHERE pv2.product_id = p.id AND pv2.photo_url IS NOT NULL
+                       ORDER BY pv2.id ASC LIMIT 1
+                   ) AS photo_url
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
             LEFT JOIN brands b ON p.brand_id = b.id
             LEFT JOIN product_variants pv ON p.id = pv.product_id
             GROUP BY p.id
-            LIMIT 10
+            ORDER BY RANDOM() LIMIT 10
         """
         params = ()
     else:
@@ -1357,7 +1363,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             WHERE p.name LIKE ? OR p.description LIKE ? OR
                   c.name LIKE ? OR sc.name LIKE ? OR b.name LIKE ?
             GROUP BY p.id
-            LIMIT 10
+            ORDER BY RANDOM() LIMIT 10
         """
         params = (f"%{query_text}%",) * 5
 
@@ -1401,6 +1407,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results.append(result)
 
     await update.inline_query.answer(results, cache_time=1)
+
 
 
 
