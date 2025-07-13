@@ -14,6 +14,7 @@ from configs import ADMIN_IDS, ITEMS_PER_PAGE
 from db import fetchall, fetchone, execute
 from datetime import datetime
 import time
+from datetime import datetime, timezone
 ASK_NAME, ASK_ADDRESS, ASK_PHONE = range(3)
 import telegram.error
 import logging
@@ -1096,9 +1097,10 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cart_json = json.dumps(cart, ensure_ascii=False)
     total_price = sum(item['price'] * item['quantity'] for item in cart.values())
     try:
+        created_at_utc = datetime.now(timezone.utc).isoformat()
         order_id = await execute(
-    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, total_price, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    (user_id, name, address, phone, cart_json, total_price, 'pending_payment')
+    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, total_price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    (user_id, name, address, phone, cart_json, total_price, 'pending_payment', created_at_utc)
                                 )
 
     except Exception as e:
