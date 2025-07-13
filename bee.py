@@ -230,43 +230,66 @@ def prepare_orders_report_data(orders, period: str):
     return data
 
 
-def export_orders_to_gsheet(data, sheet_title="отчет по заказам"):
+def export_orders_to_gsheet(data, sheet_name):
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=[
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive'
     ])
     client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+
     try:
-        worksheet = spreadsheet.worksheet(sheet_title)
+        spreadsheet = client.open(SPREADSHEET_NAME)
+    except gspread.exceptions.SpreadsheetNotFound:
+        spreadsheet = client.create(SPREADSHEET_NAME)
+        spreadsheet.share(creds.service_account_email, perm_type='user', role='writer')
+
+    try:
+        worksheet = spreadsheet.worksheet(sheet_name)
     except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=sheet_title, rows="500", cols="20")
+        worksheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
 
     worksheet.clear()
     worksheet.append_rows(data)
+
     sheet_id = worksheet._properties['sheetId']
 
-    spreadsheet.batch_update([{
-        "requests": [{
-            "updateDimensionProperties": {
-                "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 9},
-                "properties": {"pixelSize": 200},
-                "fields": "pixelSize"
+    spreadsheet.batch_update({
+        "requests": [
+            {
+                "updateDimensionProperties": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": 9
+                    },
+                    "properties": {
+                        "pixelSize": 200
+                    },
+                    "fields": "pixelSize"
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "wrapStrategy": "WRAP"
+                        }
+                    },
+                    "fields": "userEnteredFormat.wrapStrategy"
+                }
             }
-        }]
-    }, {
-        "requests": [{
-            "repeatCell": {
-                "range": {"sheetId": sheet_id},
-                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
-                "fields": "userEnteredFormat.wrapStrategy"
-            }
-        }]
-    }])
+        ]
+    })
+
     return f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit#gid={sheet_id}"
 
 
-    
+
+
 if __name__ == "__main__":
     data = fetch_products_detailed()
     # Для отладки — распечатаем данные
