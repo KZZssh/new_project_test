@@ -8,6 +8,35 @@ from telegram.constants import ParseMode
 import asyncio
 from configs import ADMIN_IDS, FLASK_UPLOAD_URL
 from db import fetchall, fetchone, execute
+import pytz
+from datetime import datetime
+
+def convert_to_local_time(utc_str):
+    """Конвертирует строку с датой UTC в локальное время Астаны (GMT+5)."""
+    if not utc_str:
+        return "неизвестно"
+    try:
+        # Указываем часовой пояс Казахстана
+        local_tz = pytz.timezone('Asia/Almaty')
+        
+        # Преобразуем строку из формата ISO в объект datetime
+        # (с учетом того, что Python до 3.11 может не понимать 'Z' или '+00:00' напрямую)
+        if utc_str.endswith('+00:00'):
+            utc_str = utc_str[:-6]
+        
+        utc_dt = datetime.fromisoformat(utc_str).replace(tzinfo=pytz.utc)
+        
+        # Конвертируем в локальное время
+        local_dt = utc_dt.astimezone(local_tz)
+        
+        # Возвращаем в красивом формате "день.месяц.год часы:минуты"
+        return local_dt.strftime('%d.%m.%Y %H:%M')
+    except Exception as e:
+        # Если что-то пошло не так, вернем как есть, чтобы не сломать бота
+        print(f"Ошибка конвертации времени: {e}") # Для отладки
+        return utc_str
+    
+
 
 def get_effective_message(update):
     # Вернёт message для обычного сообщения или callback_query.message для кнопки
@@ -1021,7 +1050,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
         f"<b>Сумма:</b> {total} ₸\n\n"
         f"<b>Статус:</b> <i>{status}</i>\n\n"
         f"<b>Состав:</b>\n{cart_text}\n\n"
-        f"<b>Дата:</b> {order['created_at']}"
+        f"<b>Дата:</b> {convert_to_local_time(order['created_at'])}"
     )
 
     buttons = []
