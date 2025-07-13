@@ -147,16 +147,15 @@ def export_to_gsheet(data):
 def get_gsheet_url():
     return GOOGLE_SHEET_URL
 
-def download_xlsx(spreadsheet_id: str):
+def download_xlsx(spreadsheet_id: str, filename: str = "report.xlsx"):
     xlsx_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
-    local_filename = "orders_report.xlsx" if "orders" in spreadsheet_id else "otchet_po_tovaram.xlsx"
     r = requests.get(xlsx_url)
     if r.status_code == 200:
-        with open(local_filename, "wb") as f:
+        with open(filename, "wb") as f:
             f.write(r.content)
-        return local_filename
-    else:
-        return None
+        return filename
+    return None
+
 
 def download_products_xlsx():
     return download_xlsx(SPREADSHEET_ID, filename="otchet_po_tovaram.xlsx")
@@ -286,7 +285,9 @@ def export_orders_to_gsheet(data, sheet_title):
         ]
     })
 
-    return spreadsheet.id  # 👈 возвращаем ID именно этой новой таблицы
+    sheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet.id}/edit#gid={sheet_id}"
+    return spreadsheet.id, sheet_url
+
 
 
 
