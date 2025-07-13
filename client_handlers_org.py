@@ -534,17 +534,44 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
                     context.user_data['product_slider_page'] = i
                     break
 
-        # 💾 Сохраняем контекст слайдера ТОЛЬКО если есть все нужные данные
-        if context.user_data.get('current_subcat_id') is not None and context.user_data.get('current_brand_id') is not None:
-            context.user_data['return_to_slider'] = {
-                'product_slider_page': context.user_data.get('product_slider_page', 0),
-                'all_mode': context.user_data.get('all_mode', False),
-                'current_subcat_id': context.user_data['current_subcat_id'],
-                'current_brand_id': context.user_data['current_brand_id']
-            }
-        else:
-            # 🧹 Если нет полного контекста — сбрасываем старое
-            context.user_data.pop('return_to_slider', None)
+        # 💾 Контекст слайдера
+        subcat_id = context.user_data.get('current_subcat_id')
+        brand_id = context.user_data.get('current_brand_id')
+        all_mode = context.user_data.get('all_mode', False)
+        slider_page = None
+
+        if subcat_id:
+            if all_mode:
+                product_list = await fetchall("""
+                    SELECT p.id FROM products p
+                    JOIN product_variants pv ON p.id = pv.product_id
+                    WHERE p.sub_category_id = ? AND pv.quantity > 0
+                    GROUP BY p.id
+                    ORDER BY MIN(pv.price)
+                """, (subcat_id,))
+            else:
+                product_list = await fetchall("""
+                    SELECT p.id FROM products p
+                    JOIN product_variants pv ON p.id = pv.product_id
+                    WHERE p.sub_category_id = ? AND p.brand_id = ? AND pv.quantity > 0
+                    GROUP BY p.id
+                    ORDER BY MIN(pv.price)
+                """, (subcat_id, brand_id))
+
+            for i, item in enumerate(product_list):
+                if item['id'] == product_id:
+                    slider_page = i
+                    context.user_data['product_slider_page'] = i
+                    break
+
+            # 💾 Сохраняем return_to_slider только если нашли товар в списке
+            if slider_page is not None:
+                context.user_data['return_to_slider'] = {
+                    'product_slider_page': slider_page,
+                    'all_mode': all_mode,
+                    'current_subcat_id': subcat_id,
+                    'current_brand_id': brand_id
+                }
 
 
     # Получаем товар
