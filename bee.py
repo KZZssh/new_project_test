@@ -8,6 +8,7 @@ import json
 import requests
 from pathlib import Path
 from configs import DB_FILE
+from google.auth.transport.requests import Request
 
 DB_FILE = DB_FILE  # ✅ просто в корне проекта
 SERVICE_ACCOUNT_FILE = Path("credentials.json")
@@ -153,13 +154,26 @@ def get_gsheet_url():
     return GOOGLE_SHEET_URL
 
 def download_xlsx(spreadsheet_id: str, filename: str = "report.xlsx"):
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=[
+        'https://www.googleapis.com/auth/drive.readonly'
+    ])
+    access_token = creds.token
+    if not access_token:
+        creds.refresh(Request())
+        access_token = creds.token
+
     xlsx_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
-    r = requests.get(xlsx_url)
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    r = requests.get(xlsx_url, headers=headers)
     if r.status_code == 200:
         with open(filename, "wb") as f:
             f.write(r.content)
         return filename
-    return None
+    else:
+        print("❌ Ошибка скачивания XLSX:", r.status_code, r.text)
+        return None
+
 
 
 def download_products_xlsx():
@@ -261,16 +275,14 @@ def export_orders_to_gsheet(data, sheet_title):
     ])
     client = gspread.authorize(creds)
 
-    # 🔄 Создаём отдельный файл под этот отчёт
     spreadsheet = client.create(sheet_title)
-    spreadsheet.share(creds.service_account_email, perm_type='user', role='writer')
-    
+    spreadsheet.share(None, perm_type='anyone', role='reader')  # Доступ по ссылке!
 
     worksheet = spreadsheet.sheet1
     worksheet.update_title(sheet_title)
     worksheet.append_rows(data)
 
-    # Оформляем
+    # Оформление
     sheet_id = worksheet._properties['sheetId']
     spreadsheet.batch_update({
         "requests": [
@@ -292,9 +304,8 @@ def export_orders_to_gsheet(data, sheet_title):
     })
 
     sheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet.id}/edit#gid={sheet_id}"
-    
-
     return spreadsheet.id, sheet_url
+
 
 
 
