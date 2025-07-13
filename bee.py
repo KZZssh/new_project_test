@@ -147,9 +147,9 @@ def export_to_gsheet(data):
 def get_gsheet_url():
     return GOOGLE_SHEET_URL
 
-def download_xlsx():
-    xlsx_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=xlsx"
-    local_filename = "otchet_po_tovaram.xlsx"
+def download_xlsx(spreadsheet_id: str):
+    xlsx_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
+    local_filename = "orders_report.xlsx" if "orders" in spreadsheet_id else "otchet_po_tovaram.xlsx"
     r = requests.get(xlsx_url)
     if r.status_code == 200:
         with open(local_filename, "wb") as f:
@@ -157,6 +157,10 @@ def download_xlsx():
         return local_filename
     else:
         return None
+
+def download_products_xlsx():
+    return download_xlsx(SPREADSHEET_ID, filename="otchet_po_tovaram.xlsx")
+
 
 # --- ОТЧЕТЫ ПО ЗАКАЗАМ ---
 
@@ -246,58 +250,44 @@ def prepare_orders_data_for_gsheet(period: str):
 
 
 
-def export_orders_to_gsheet(data, sheet_name):
+def export_orders_to_gsheet(data, sheet_title):
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=[
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive'
     ])
     client = gspread.authorize(creds)
 
-    spreadsheet = client.open(SPREADSHEET_NAME)
+    # 🔄 Создаём отдельный файл под этот отчёт
+    spreadsheet = client.create(sheet_title)
+    spreadsheet.share(creds.service_account_email, perm_type='user', role='writer')
 
-    try:
-        worksheet = spreadsheet.worksheet(sheet_name)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
-
-    worksheet.clear()
+    worksheet = spreadsheet.sheet1
+    worksheet.update_title(sheet_title)
     worksheet.append_rows(data)
 
+    # Оформляем
     sheet_id = worksheet._properties['sheetId']
-
     spreadsheet.batch_update({
         "requests": [
             {
                 "updateDimensionProperties": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "dimension": "COLUMNS",
-                        "startIndex": 0,
-                        "endIndex": 9
-                    },
-                    "properties": {
-                        "pixelSize": 200
-                    },
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 9},
+                    "properties": {"pixelSize": 200},
                     "fields": "pixelSize"
                 }
             },
             {
                 "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "wrapStrategy": "WRAP"
-                        }
-                    },
+                    "range": {"sheetId": sheet_id},
+                    "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
                     "fields": "userEnteredFormat.wrapStrategy"
                 }
             }
         ]
     })
 
-    return f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit#gid={sheet_id}"
+    return spreadsheet.id  # 👈 возвращаем ID именно этой новой таблицы
+
 
 
 

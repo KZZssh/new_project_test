@@ -523,14 +523,15 @@ async def get_sales_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(report_message, parse_mode=ParseMode.HTML)
     
 
-from bee import fetch_products_detailed, export_to_gsheet, download_xlsx, GOOGLE_SHEET_URL
+from bee import fetch_products_detailed, export_to_gsheet, download_products_xlsx, GOOGLE_SHEET_URL
 # --- Отчёт по товарам ---
 async def send_products_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Получаем актуальные данные и обновляем Google Sheet
     data = fetch_products_detailed()
     export_to_gsheet(data)
     # 2. Скачиваем .xlsx-файл
-    xlsx_file = download_xlsx()
+    xlsx_file = download_products_xlsx()
+
     # 3. Отправляем ссылку на Google Таблицу
     msg = get_effective_message(update)
     if msg:
@@ -579,6 +580,7 @@ from bee import prepare_orders_data_for_gsheet, export_orders_to_gsheet, downloa
 async def handle_orders_report_period(update, context):
     query = update.callback_query
     await query.answer()
+    
     period_key = query.data.split("_")[-1]
     period_map = {
         "today": "today",
@@ -596,33 +598,28 @@ async def handle_orders_report_period(update, context):
     # Генерация данных
     data = prepare_orders_data_for_gsheet(period)
     if len(data) == 1:
-        await query.edit_message_text("❗️Заказов за выбранный период не найдено.")
+        await query.message.reply_text("❗️Заказов за выбранный период не найдено.")
         return
 
-    # Экспорт
-    sheet_url = export_orders_to_gsheet(data, f"заказы_{period}")
-    xlsx_file = download_xlsx()
+    # Экспорт в Google Sheet
+    spreadsheet_id, sheet_url = export_orders_to_gsheet(data, f"заказы_{period}")
 
-    # Отправка ссылки
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=f"📊 Отчёт по заказам за {PERIODS[period]}:\n{sheet_url}"
-    )
+    # Скачивание .xlsx
+    xlsx_file = download_xlsx(spreadsheet_id, filename=f"orders_report_{period}.xlsx")
 
-    # Отправка файла
+    # Отправка ссылки и файла
+    await query.message.reply_text(f"🔗 Ссылка на Google Таблицу:\n{sheet_url}")
+    
     if xlsx_file:
         with open(xlsx_file, "rb") as f:
-            await context.bot.send_document(
-                chat_id=query.message.chat_id,
+            await query.message.reply_document(
                 document=f,
-                filename=f"orders_{period}.xlsx",
-                caption="Отчёт по заказам (.xlsx)"
+                filename=f"orders_report_{period}.xlsx",
+                caption=f"📄 Отчёт по заказам ({PERIODS[period]})"
             )
     else:
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="⚠️ Не удалось скачать .xlsx-файл. Проверьте доступы к Google Sheets."
-        )
+        await query.message.reply_text("⚠️ Не удалось скачать .xlsx-файл.")
+
 
 
 
