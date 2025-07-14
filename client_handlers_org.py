@@ -6,9 +6,9 @@ from telegram import (
 )
 import asyncio
 from telegram.ext import (
-    CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters , InlineQueryHandler
+    CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters , InlineQueryHandler 
 )
-from telegram import ParseMode, InputFile
+from telegram import  InputFile
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 from configs import ADMIN_IDS, ITEMS_PER_PAGE
