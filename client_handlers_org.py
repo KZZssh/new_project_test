@@ -1492,14 +1492,7 @@ kb = ReplyKeyboardMarkup(keyboard=
 async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE ):
     text = "Главное меню\nвыберите действие:"
     context.user_data['cart_return_source'] = "main_menu"
-    gif_path = InputFile("/app/media/FlyStore.gif")
-    await context.bot.send_animation(
-        chat_id=update.effective_chat.id,
-        animation=gif_path,
-        caption=text,
-        parse_mode=ParseMode.HTML
-    )
-
+    
 
     """
     Универсально: вызывает главное меню как reply-клавиатуру.
