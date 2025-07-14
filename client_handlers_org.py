@@ -1104,9 +1104,10 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         created_at_utc = datetime.now(timezone.utc).isoformat()
         order_id = await execute(
-    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, brand, total_price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, brand, total_price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     (user_id, name, address, phone, cart_json, brand, total_price, 'pending_payment', created_at_utc)
-                                )
+)
+
 
     except Exception as e:
         print(f"Ошибка при сохранении заказа в БД: {e}")
