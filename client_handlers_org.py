@@ -1117,17 +1117,15 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
      # --- Формируем чек ---
     cart_lines = []
     for item in cart.values():
-        cart_lines.append(f"{item['name']} x{item['quantity']} = {item['price']*item['quantity']}₸")
-    cart_text = "\n".join([
-        f"{item['name']} x{item['quantity']} = {item['price']*item['quantity']}₸" for item in cart.values()
-    ])
+        cart_lines.append(f"{item['name']} x{item['quantity']} = {item['price']*item['quantity']}₸\nБренд: {item.get('brand', 'Не указано')}")
+    cart_text = "\n".join(cart_lines)
     brands = ", ".join(set(item.get("brand", "Не указано") for item in cart.values()))
     receipt_text = (
         f"🧾 <b>Ваш чек №{order_id}</b>\n\n"
         f"<b>Имя:</b> {name}\n"
         f"<b>Телефон:</b> {phone}\n"
         f"<b>Адрес:</b> {address}\n\n"
-        f"<b>Товары:</b>\n{cart_text}\n<b>Бренд:</b> {brands}\n"
+        f"<b>Товары:</b>\n{cart_text}\n\n"
         f"<b>Итого:</b> {total_price}₸"
     )
 
@@ -1267,7 +1265,7 @@ async def payment_confirmation(update: Update, context: ContextTypes.DEFAULT_TYP
     if order and order['status'] == 'pending_payment':
         await execute("UPDATE orders SET status = ? WHERE id = ?", ('pending_verification', order_id))
         cart = json.loads(order['cart'])
-        cart_text = "\n".join([f"• {md2(item['name'])} \\(x{md2(item['quantity'])}\\)" for item in cart.values()])
+        cart_text = "\n".join([f"• {md2(item['name'])} \\(x{md2(item['quantity'])}\\)\nБренд: {md2(item.get('brand', 'Не указано'))}" for item in cart.values()])
 
         user_id = order['user_id']
         user_name = order['user_name']

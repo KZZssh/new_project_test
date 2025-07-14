@@ -260,7 +260,11 @@ def prepare_orders_data_for_gsheet(period: str):
             cart = json.loads(cart_json)
         except:
             cart = {}
-        items_str = "; ".join(f'{item["name"]} x{item["quantity"]}' for item in cart.values())
+        items_str = "; ".join(
+            f'{item["name"]} x{item["quantity"]} (Бренд: {item.get("brand", "Не указано")})'
+            for item in cart.values()
+        )
+
         total_qty = sum(item.get("quantity", 0) for item in cart.values())
         rus_status = STATUS_MAP.get(status, "Неизвестен")
         data.append([oid, uname, phone, addr, rus_status, created[:16], items_str, round(total), total_qty])
