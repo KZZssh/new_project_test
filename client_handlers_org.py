@@ -8,6 +8,7 @@ import asyncio
 from telegram.ext import (
     CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters , InlineQueryHandler
 )
+from telegram import ParseMode, InputFile
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 from configs import ADMIN_IDS, ITEMS_PER_PAGE
@@ -1486,9 +1487,18 @@ kb = ReplyKeyboardMarkup(keyboard=
         resize_keyboard=True
     )
 
-async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE , text="Главное меню\nвыберите действие:"):
-    
+
+
+async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE ):
+    text = "Главное меню\nвыберите действие:"
     context.user_data['cart_return_source'] = "main_menu"
+    gif_path = InputFile("/app/media/FlyStore.gif")
+    await context.bot.send_animation(
+        chat_id=update.effective_chat.id,
+        animation=gif_path,
+        caption=text,
+        parse_mode=ParseMode.HTML
+    )
 
 
     """
@@ -1543,11 +1553,13 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "Добро пожаловать в наш магазин!"
-    
-    await update.message.reply_text(
-        text,
-        reply_markup=kb ,
+    text =f"👋 Добро пожаловать в FlyStore!\n\n  Здесь ты найдёшь стильную одежду, удобную обувь и аксессуары, которые подойдут именно тебе.\n\n✨ Начни с выбора категории или просто введи, что ищешь. Удачных покупок! 🛒"
+
+    gif_path = InputFile("/app/media/FlyStore.gif")
+    await context.bot.send_animation(
+        chat_id=update.effective_chat.id,
+        animation=gif_path,
+        caption=text,
         parse_mode=ParseMode.HTML
     )
     args = context.args
