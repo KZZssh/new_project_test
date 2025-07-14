@@ -866,7 +866,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
             item_total = item['price'] * item['quantity']
             total_price += item_total
 
-            text += f" <b>{item['name']} Бренд: {item['brand']}</b> (x{item['quantity']}) - {item_total}₸\n\n"
+            text += f" <b>{item['name']} </b> (x{item['quantity']}) - {item_total}₸\n<b>Бренд: {item['brand']}</b>\n"
 
             keyboard.append([
                 InlineKeyboardButton("➖", callback_data=f"cart_minus_{variant_id_str}"),
