@@ -1558,7 +1558,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_id='BQACAgIAAxkBAAI3Wmh1Rc5IekOU1myeOOyv_vKAJysoAAJxcwACj3-xS6fv6CyjMf6XNgQ'
     await context.bot.send_animation(
         chat_id=update.effective_chat.id,
-        document=file_id,
+        animation=file_id,
         caption=text,
         parse_mode=ParseMode.HTML
     )
