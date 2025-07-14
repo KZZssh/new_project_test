@@ -801,12 +801,12 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE, sub
 
 async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None ):
     variant = await fetchone("""
-        SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color , b.name as brand
+        SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color , p.brand_id, b.name as brand
         FROM product_variants pv
         JOIN products p ON pv.product_id = p.id
         JOIN sizes s ON pv.size_id = s.id
         JOIN colors c ON pv.color_id = c.id
-        JOIN brands b ON pv.brand_id = b.id
+        JOIN brands b ON p.brand_id = b.id
         WHERE pv.id = ?
     """, (product_variant_id,))
     if not variant or variant['quantity'] <= 0:
