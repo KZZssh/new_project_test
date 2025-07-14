@@ -1544,8 +1544,7 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "Добро пожаловать в наш магазин!"
-    with open("c:\Users\user\Downloads\FlyStore.gif", "rb") as gif:
-        await update.message.reply_animation(gif)
+    
     await update.message.reply_text(
         text,
         reply_markup=kb ,
