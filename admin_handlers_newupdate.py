@@ -1039,6 +1039,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
     status = f"{status_names.get(raw_status, raw_status)}"
     total = f"{order['total_price']}"
     cart = json.loads(order["cart"])
+    brands = ", ".join(set(item.get("brand", "Не указано") for item in cart.values()))
     cart_text = "\n".join([
         f"• {item['name']} (x{item['quantity']})" for item in cart.values()
     ])
@@ -1050,7 +1051,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
         f"<b>Сумма:</b> {total} ₸\n\n"
         f"<b>Статус:</b> <i>{status}</i>\n\n"
         f"<b>Состав:</b>\n{cart_text}\n\n"
-        f"<b>Бренд:</b> {order['brand']}\n"
+        f"<b>Бренд:</b> {brands}\n"
         f"<b>Дата:</b> {convert_to_local_time(order['created_at'])}"
     )
 

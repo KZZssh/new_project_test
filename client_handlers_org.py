@@ -737,7 +737,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['current_brand_id'] = product['brand_id']
 
     variant = await fetchone("""
-        SELECT pv.*, s.name as size, c.name as color
+        SELECT pv.*, s.name as size, c.name as color , b.name as brand
         FROM product_variants pv
         JOIN sizes s ON pv.size_id = s.id
         JOIN colors c ON pv.color_id = c.id
@@ -799,11 +799,12 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE, sub
 
 async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None ):
     variant = await fetchone("""
-        SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color
+        SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color , b.name as brand
         FROM product_variants pv
         JOIN products p ON pv.product_id = p.id
         JOIN sizes s ON pv.size_id = s.id
         JOIN colors c ON pv.color_id = c.id
+        JOIN brands b ON pv.brand_id = b.id
         WHERE pv.id = ?
     """, (product_variant_id,))
     if not variant or variant['quantity'] <= 0:
@@ -828,7 +829,7 @@ async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_
     if variant_id_str in cart:
         cart[variant_id_str]['quantity'] += 1
     else:
-        cart[variant_id_str] = {'name': full_name, 'price': variant['price'], 'quantity': 1}
+        cart[variant_id_str] = {'name': full_name, 'price': variant['price'], 'quantity': 1 , 'brand': variant['brand']}
     return True
 
 
@@ -1114,16 +1115,19 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cart_lines = []
     for item in cart.values():
         cart_lines.append(f"{item['name']} x{item['quantity']} = {item['price']*item['quantity']}₸")
-    cart_text = "\n".join(cart_lines)
+    cart_text = "\n".join([
+        f"{item['name']} x{item['quantity']} = {item['price']*item['quantity']}₸" for item in cart.values()
+    ])
+    brands = ", ".join(set(item.get("brand", "Не указано") for item in cart.values()))
     receipt_text = (
         f"🧾 <b>Ваш чек №{order_id}</b>\n\n"
         f"<b>Имя:</b> {name}\n"
         f"<b>Телефон:</b> {phone}\n"
         f"<b>Адрес:</b> {address}\n\n"
-        f"<b>Товары:</b>\n{cart_text}\n<b>Бренд:</b> {item['brand']}\n"
+        f"<b>Товары:</b>\n{cart_text}\n<b>Бренд:</b> {brands}\n"
         f"<b>Итого:</b> {total_price}₸"
-
     )
+
 
     await update.message.reply_text(receipt_text, parse_mode="HTML")
 
