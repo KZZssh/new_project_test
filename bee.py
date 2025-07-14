@@ -316,14 +316,46 @@ def export_orders_to_gsheet(data, sheet_title):
 
 
 
+from openpyxl import Workbook
+from openpyxl.styles import Alignment
+from openpyxl.utils import get_column_letter
+
+def export_to_excel(data, filename="report.xlsx"):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Отчет"
+
+    for row in data:
+        ws.append(row)
+
+    # Форматируем: ширина + перенос текста
+    for col_idx in range(1, len(data[0]) + 1):
+        col_letter = get_column_letter(col_idx)
+        max_len = max(len(str(row[col_idx - 1])) for row in data if len(row) > col_idx - 1)
+        ws.column_dimensions[col_letter].width = min(max_len * 1.2, 70)
+
+        for row_idx in range(1, len(data) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    wb.save(filename)
+    print(f"✅ Excel сохранён: {filename}")
 
 
 if __name__ == "__main__":
+    print("📦 Жүктелуде... Тауар мәліметтерін жинап жатырмыз...")
     data = fetch_products_detailed()
-    # Для отладки — распечатаем данные
+
+    # Терминалға шығару (отладка үшін)
     for row in data:
         print(" | ".join(str(x) for x in row))
 
-    # Экспорт
+    # Google Sheets-ке экспорт
+    print("📤 Google Sheets-ке экспорт...")
     export_to_gsheet(data)
-    print("✅ Подробные данные о товарах экспортированы в Google Sheets!") 
+    print("✅ Подробные данные о товарах экспортированы в Google Sheets!")
+
+    # Excel-ге экспорт
+    print("📥 Excel файлына экспорт...")
+    export_to_excel(data, filename="otchet_tovary.xlsx")
+    print("✅ Файл сақталды: otchet_tovary.xlsx")
