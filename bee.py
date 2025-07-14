@@ -313,48 +313,38 @@ def export_orders_to_gsheet(data, sheet_title):
     return spreadsheet.id, sheet_url
 
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment
-from openpyxl.utils import get_column_letter
+import xlsxwriter
 
-def export_to_excel(data, filename="report.xlsx"):
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Отчет"
+def export_to_excel_xlsxwriter(data, filename="report.xlsx"):
+    workbook = xlsxwriter.Workbook(filename)
+    worksheet = workbook.add_worksheet("Отчет")
 
-    for row in data:
-        ws.append(row)
+    wrap_format = workbook.add_format({
+        'text_wrap': True,
+        'valign': 'top'
+    })
 
-    # Обработка строк: высота строки по количеству строк в ячейках
-    for row_idx, row in enumerate(data, start=1):
-        max_line_count = 1
-        for col_idx, cell_value in enumerate(row, start=1):
-            cell = ws.cell(row=row_idx, column=col_idx)
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+    # Запись данных
+    for row_idx, row in enumerate(data):
+        for col_idx, value in enumerate(row):
+            worksheet.write(row_idx, col_idx, str(value), wrap_format)
 
-            # Подсчёт примерного количества строк (по длине или по \n)
-            text = str(cell_value)
-            est_lines = text.count("\n") + max(1, len(text) // 40)
-            max_line_count = max(max_line_count, est_lines)
+    # Автоширина по колонкам
+    for col_idx in range(len(data[0])):
+        max_width = max(len(str(row[col_idx])) for row in data if len(row) > col_idx)
+        worksheet.set_column(col_idx, col_idx, min(max_width * 1.1, 60))  # до 60 символов ширина
 
-        # Устанавливаем высоту строки
-        ws.row_dimensions[row_idx].height = max_line_count * 15  # Высота на строку
+    # Установка высоты строки
+    for row_idx, row in enumerate(data):
+        max_lines = 1
+        for cell in row:
+            lines = str(cell).count('\n') + max(1, len(str(cell)) // 40)
+            max_lines = max(max_lines, lines)
+        worksheet.set_row(row_idx, max_lines * 15)
 
-    # Обработка столбцов: ширина по максимальной длине
-    for col_idx in range(1, len(data[0]) + 1):
-        col_letter = get_column_letter(col_idx)
-        max_length = 0
-        for row in data:
-            try:
-                val = str(row[col_idx - 1])
-            except:
-                val = ""
-            if val:
-                max_length = max(max_length, len(val))
-        ws.column_dimensions[col_letter].width = min(max_length * 1.1, 60)  # лимит
+    workbook.close()
+    print(f"✅ Excel (XlsxWriter) файл сохранён: {filename}")
 
-    wb.save(filename)
-    print(f"✅ Excel файл сохранён: {filename}")
 
 
 
@@ -371,7 +361,8 @@ if __name__ == "__main__":
     export_to_gsheet(data)
     print("✅ Подробные данные о товарах экспортированы в Google Sheets!")
 
-    # Excel-ге экспорт
+    # Excel-ге экспорт (ЖАҢА — xlsxwriter қолданады)
     print("📥 Excel файлына экспорт...")
-    export_to_excel(data, filename="otchet_tovary.xlsx")
+    export_to_excel_xlsxwriter(data, filename="otchet_tovary.xlsx")
     print("✅ Файл сақталды: otchet_tovary.xlsx")
+
