@@ -328,12 +328,21 @@ def export_to_excel(data, filename="report.xlsx"):
     for row in data:
         ws.append(row)
 
-    # Форматируем: ширина + перенос текста
+    # Форматирование: ширина и перенос
     for col_idx in range(1, len(data[0]) + 1):
         col_letter = get_column_letter(col_idx)
-        max_len = max(len(str(row[col_idx - 1])) for row in data if len(row) > col_idx - 1)
-        ws.column_dimensions[col_letter].width = min(max_len * 1.2, 70)
 
+        # Найдем максимальную длину в колонке
+        max_len = 0
+        for row in data:
+            if col_idx - 1 < len(row):
+                cell_val = str(row[col_idx - 1])
+                max_len = max(max_len, len(cell_val))
+
+        # Расширяем по ширине – агрессивно
+        ws.column_dimensions[col_letter].width = min(max_len * 1.5, 100)
+
+        # Перенос текста включаем для всех ячеек
         for row_idx in range(1, len(data) + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.alignment = Alignment(wrap_text=True, vertical="top")
