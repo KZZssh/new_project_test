@@ -1555,10 +1555,10 @@ async def show_reply_main_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text =f"👋 Добро пожаловать в FlyStore!\n\n  Здесь ты найдёшь стильную одежду, удобную обувь и аксессуары, которые подойдут именно тебе.\n\n✨ Начни с выбора категории или просто введи, что ищешь. Удачных покупок! 🛒"
 
-    gif_path = InputFile("/app/media/FlyStore.gif")
-    await context.bot.send_document(
+    file_id='BQACAgIAAxkBAAI3Wmh1Rc5IekOU1myeOOyv_vKAJysoAAJxcwACj3-xS6fv6CyjMf6XNgQ'
+    await context.bot.send_animation(
         chat_id=update.effective_chat.id,
-        document=gif_path,
+        document=file_id,
         caption=text,
         parse_mode=ParseMode.HTML
     )
