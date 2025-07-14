@@ -1041,7 +1041,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
     cart = json.loads(order["cart"])
     
     cart_text = "\n".join([
-        f"• {item['name']} (x{item['quantity']})\nБренд: {item.get('brand', 'Не указано')})" for item in cart.values()
+        f"• {item['name']} (x{item['quantity']})\nБренд: {item.get('brand', 'Не указано')}" for item in cart.values()
     ])
     msg = (
         f"🧾 <b>Чек №{order_id}</b>\n\n"

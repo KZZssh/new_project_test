@@ -34,8 +34,9 @@ def fetch_products_detailed():
     c = conn.cursor()
 
     c.execute("""
-        SELECT p.id, p.name, p.category_id, p.sub_category_id
+        SELECT p.id, p.name, p.category_id, p.sub_category_id, b.name as brand_name
         FROM products p
+        LEFT JOIN brands b ON p.brand_id = b.id
         ORDER BY p.id
     """)
     products = c.fetchall()
@@ -53,8 +54,8 @@ def fetch_products_detailed():
     colors_dict = defaultdict(set)
     sizes_dict = defaultdict(set)
     total_quantity = defaultdict(int)
-    pairs_quantity = defaultdict(lambda: defaultdict(int))  # product_id -> (size,color) -> qty
-    pairs_price = defaultdict(dict)  # product_id -> (size,color) -> price
+    pairs_quantity = defaultdict(lambda: defaultdict(int))
+    pairs_price = defaultdict(dict)
 
     for product_id, size_id, color_id, qty, size_name, color_name, price in variants:
         colors_dict[product_id].add(color_name)
@@ -64,10 +65,10 @@ def fetch_products_detailed():
         pairs_price[product_id][(size_name, color_name)] = price
 
     data = [
-        ["id", "Название", "id категории", "id подкатегории", "цвета", "размеры", "кол-ва (размер/цвет/цена)", "общее кол-во"]
+        ["id", "Название", "id категории", "id подкатегории", "Бренд", "Цвета", "Размеры", "Кол-ва (размер/цвет/цена)", "Общее кол-во"]
     ]
     for p in products:
-        pid, name, cat_id, subcat_id = p
+        pid, name, cat_id, subcat_id, brand = p
         colors = ", ".join(sorted(filter(None, colors_dict[pid])))
         sizes = ", ".join(sorted(filter(None, sizes_dict[pid])))
         scq = "; ".join(
@@ -75,8 +76,9 @@ def fetch_products_detailed():
             for (size, color), qty in pairs_quantity[pid].items()
         )
         total = total_quantity[pid]
-        data.append([pid, name, cat_id, subcat_id, colors, sizes, scq, total])
+        data.append([pid, name, cat_id, subcat_id, brand, colors, sizes, scq, total])
     return data
+
 
 def export_to_gsheet(data):
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=[
@@ -292,8 +294,8 @@ def export_orders_to_gsheet(data, sheet_title):
         "requests": [
             {
                 "updateDimensionProperties": {
-                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 9},
-                    "properties": {"pixelSize": 200},
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 10},
+                    "properties": {"pixelSize": 220},  # увеличено с 200
                     "fields": "pixelSize"
                 }
             },
