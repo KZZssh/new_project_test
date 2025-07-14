@@ -1050,6 +1050,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
         f"<b>Сумма:</b> {total} ₸\n\n"
         f"<b>Статус:</b> <i>{status}</i>\n\n"
         f"<b>Состав:</b>\n{cart_text}\n\n"
+        f"<b>Бренд:</b> {order['brand']}\n"
         f"<b>Дата:</b> {convert_to_local_time(order['created_at'])}"
     )
 

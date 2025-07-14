@@ -741,6 +741,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         FROM product_variants pv
         JOIN sizes s ON pv.size_id = s.id
         JOIN colors c ON pv.color_id = c.id
+        JOIN brands b ON pv.brand_id = b.id
         WHERE pv.product_id = ? AND pv.color_id = ? AND pv.size_id = ? AND pv.quantity > 0
         LIMIT 1
     """, (product_id, color_id, size_id))
@@ -749,7 +750,7 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     product = await fetchone("SELECT name FROM products WHERE id = ?", (product_id,))
     text = (
-        f"<b>{product['name']}</b>\n \n<i>Цвет:</i> <b><i>{variant['color']}</i></b>\n<i>Размер:</i> <b><i>{variant['size']}</i></b>\n<i>Цена:</i> <b><i>{variant['price']}₸</i></b>\n<i>В наличии:</i> <b><i>{variant['quantity']} шт.</i></b>\n\n"
+        f"<b>{product['name']}</b>\n \n<i>Бренд:</i> <b><i>{variant['brand']}</i></b>\n<i>Цвет:</i> <b><i>{variant['color']}</i></b>\n<i>Размер:</i> <b><i>{variant['size']}</i></b>\n<i>Цена:</i> <b><i>{variant['price']}₸</i></b>\n<i>В наличии:</i> <b><i>{variant['quantity']} шт.</i></b>\n\n"
     )
     keyboard = [
         [InlineKeyboardButton(md2("✅ Добавить в корзину"), callback_data=f"add_{variant['id']}")],
@@ -862,7 +863,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=Tr
             item_total = item['price'] * item['quantity']
             total_price += item_total
 
-            text += f" <b>{item['name']} (x{item['quantity']}) - {item_total}₸</b>\n\n"
+            text += f" <b>{item['name']} Бренд: {item['brand']}</b> (x{item['quantity']}) - {item_total}₸\n\n"
 
             keyboard.append([
                 InlineKeyboardButton("➖", callback_data=f"cart_minus_{variant_id_str}"),
@@ -1092,6 +1093,7 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     address = context.user_data["checkout_address"]
     phone = context.user_data["checkout_phone"]
     cart = context.user_data.get("cart", {})
+    brand = context.user_data.get("current_brand_id", 1)  # Подставляем 1, если бренд не указан
     if not isinstance(cart, dict):
         cart = {}
     cart_json = json.dumps(cart, ensure_ascii=False)
@@ -1099,8 +1101,8 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         created_at_utc = datetime.now(timezone.utc).isoformat()
         order_id = await execute(
-    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, total_price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    (user_id, name, address, phone, cart_json, total_price, 'pending_payment', created_at_utc)
+    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, brand, total_price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    (user_id, name, address, phone, cart_json, brand, total_price, 'pending_payment', created_at_utc)
                                 )
 
     except Exception as e:
@@ -1118,8 +1120,9 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<b>Имя:</b> {name}\n"
         f"<b>Телефон:</b> {phone}\n"
         f"<b>Адрес:</b> {address}\n\n"
-        f"<b>Товары:</b>\n{cart_text}\n\n"
+        f"<b>Товары:</b>\n{cart_text}\n<b>Бренд:</b> {item['brand']}\n"
         f"<b>Итого:</b> {total_price}₸"
+
     )
 
     await update.message.reply_text(receipt_text, parse_mode="HTML")
