@@ -737,14 +737,16 @@ async def choose_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['current_brand_id'] = product['brand_id']
 
     variant = await fetchone("""
-        SELECT pv.*, s.name as size, c.name as color , b.name as brand
-        FROM product_variants pv
-        JOIN sizes s ON pv.size_id = s.id
-        JOIN colors c ON pv.color_id = c.id
-        JOIN brands b ON p.brand_id = b.id
-        WHERE pv.product_id = ? AND pv.color_id = ? AND pv.size_id = ? AND pv.quantity > 0
-        LIMIT 1
-    """, (product_id, color_id, size_id ))
+    SELECT pv.*, s.name as size, c.name as color, b.name as brand, p.brand_id
+    FROM product_variants pv
+    JOIN sizes s ON pv.size_id = s.id
+    JOIN colors c ON pv.color_id = c.id
+    JOIN products p ON pv.product_id = p.id
+    JOIN brands b ON p.brand_id = b.id
+    WHERE pv.product_id = ? AND pv.color_id = ? AND pv.size_id = ? AND pv.quantity > 0
+    LIMIT 1
+""", (product_id, color_id, size_id))
+
     if not variant:
         await safe_edit_or_send(query, md2("Нет такого варианта в наличии.") , parse_mode="MarkdownV2", context=context)
         return
