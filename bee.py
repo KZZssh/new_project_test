@@ -325,30 +325,32 @@ def export_to_excel(data, filename="report.xlsx"):
     ws = wb.active
     ws.title = "Отчет"
 
+    # Добавляем строки
     for row in data:
         ws.append(row)
 
-    # Форматирование: ширина и перенос
-    for col_idx in range(1, len(data[0]) + 1):
-        col_letter = get_column_letter(col_idx)
-
-        # Найдем максимальную длину в колонке
-        max_len = 0
-        for row in data:
-            if col_idx - 1 < len(row):
-                cell_val = str(row[col_idx - 1])
-                max_len = max(max_len, len(cell_val))
-
-        # Расширяем по ширине – агрессивно
-        ws.column_dimensions[col_letter].width = min(max_len * 1.5, 100)
-
-        # Перенос текста включаем для всех ячеек
-        for row_idx in range(1, len(data) + 1):
-            cell = ws.cell(row=row_idx, column=col_idx)
+    # Устанавливаем перенос текста и максимальную высоту строки
+    for row in ws.iter_rows():
+        for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 
+    # Настраиваем ширину столбцов (агрессивно, чтобы точно было видно)
+    for col_idx in range(1, ws.max_column + 1):
+        col_letter = get_column_letter(col_idx)
+        max_length = 0
+        for row in ws.iter_rows():
+            if col_idx - 1 < len(row):
+                try:
+                    val = str(row[col_idx - 1].value)
+                except:
+                    val = ""
+                if val:
+                    max_length = max(max_length, len(val))
+        ws.column_dimensions[col_letter].width = min(max_length * 1.2, 100)
+
+    # Сохраняем
     wb.save(filename)
-    print(f"✅ Excel сохранён: {filename}")
+    print(f"✅ Excel файл сохранён: {filename}")
 
 
 if __name__ == "__main__":
