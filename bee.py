@@ -313,9 +313,6 @@ def export_orders_to_gsheet(data, sheet_title):
     return spreadsheet.id, sheet_url
 
 
-
-
-
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
@@ -325,32 +322,40 @@ def export_to_excel(data, filename="report.xlsx"):
     ws = wb.active
     ws.title = "Отчет"
 
-    # Добавляем строки
     for row in data:
         ws.append(row)
 
-    # Устанавливаем перенос текста и максимальную высоту строки
-    for row in ws.iter_rows():
-        for cell in row:
+    # Обработка строк: высота строки по количеству строк в ячейках
+    for row_idx, row in enumerate(data, start=1):
+        max_line_count = 1
+        for col_idx, cell_value in enumerate(row, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx)
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 
-    # Настраиваем ширину столбцов (агрессивно, чтобы точно было видно)
-    for col_idx in range(1, ws.max_column + 1):
+            # Подсчёт примерного количества строк (по длине или по \n)
+            text = str(cell_value)
+            est_lines = text.count("\n") + max(1, len(text) // 40)
+            max_line_count = max(max_line_count, est_lines)
+
+        # Устанавливаем высоту строки
+        ws.row_dimensions[row_idx].height = max_line_count * 15  # Высота на строку
+
+    # Обработка столбцов: ширина по максимальной длине
+    for col_idx in range(1, len(data[0]) + 1):
         col_letter = get_column_letter(col_idx)
         max_length = 0
-        for row in ws.iter_rows():
-            if col_idx - 1 < len(row):
-                try:
-                    val = str(row[col_idx - 1].value)
-                except:
-                    val = ""
-                if val:
-                    max_length = max(max_length, len(val))
-        ws.column_dimensions[col_letter].width = min(max_length * 1.2, 100)
+        for row in data:
+            try:
+                val = str(row[col_idx - 1])
+            except:
+                val = ""
+            if val:
+                max_length = max(max_length, len(val))
+        ws.column_dimensions[col_letter].width = min(max_length * 1.1, 60)  # лимит
 
-    # Сохраняем
     wb.save(filename)
     print(f"✅ Excel файл сохранён: {filename}")
+
 
 
 if __name__ == "__main__":
