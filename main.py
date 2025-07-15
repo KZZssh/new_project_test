@@ -169,6 +169,7 @@ async def main() -> None:
     # --- Бәрін бірге іске қосу ---
     await application.initialize()
     await application.bot.set_webhook(url=f"https://new-project-test.fly.dev{webhook_path}")
+    await asyncio.sleep(2)  # ← дам немного времени, чтобы всё успело подняться
     
     # Боттың "конвейерін" және веб-серверді қатар іске қосамыз
     async with application:

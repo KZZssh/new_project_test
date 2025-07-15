@@ -1260,27 +1260,35 @@ async def back_to_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def payment_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await query.answer(cache_time=1)  # ← кешті азайтып қой
+    asyncio.create_task(process_payment_confirmation(query, context))  # асинхронно бөлек орында
+    
+
+
+async def process_payment_confirmation(query, context):
     order_id = int(query.data.split('_')[1])
     order = await fetchone("SELECT * FROM orders WHERE id = ?", (order_id,))
     if order and order['status'] == 'pending_payment':
         await execute("UPDATE orders SET status = ? WHERE id = ?", ('pending_verification', order_id))
         cart = json.loads(order['cart'])
-        cart_text = "\n".join([f"• {md2(item['name'])} \\(x{md2(item['quantity'])}\\)\nБренд: {md2(item.get('brand', 'Не указано'))}" for item in cart.values()])
+
+        cart_text = "\n".join([
+            f"• {md2(item['name'])} \\(x{md2(item['quantity'])}\\)\nБренд: {md2(item.get('brand', 'Не указано'))}"
+            for item in cart.values()
+        ])
 
         user_id = order['user_id']
         user_name = order['user_name']
-        user_username = None
         try:
             user_obj = await context.bot.get_chat(user_id)
             user_username = user_obj.username
         except Exception:
             user_username = None
 
-        if user_username:
-            username_link = f"[@{md2(user_username)}](https://t.me/{md2(user_username)})"
-        else:
-            username_link = md2("нет username")
+        username_link = (
+            f"[@{md2(user_username)}](https://t.me/{md2(user_username)})"
+            if user_username else md2("нет username")
+        )
 
         admin_message = (
             f"🔔 *{md2('Клиент')}* \\(id: {md2(user_id)}\\) *{md2('подтвердил оплату заказа')} №{md2(order_id)}* 🔔\n\n"
@@ -1299,8 +1307,17 @@ async def payment_confirmation(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
         for admin_id in ADMIN_IDS:
-            await context.bot.send_message(chat_id=admin_id, text=admin_message, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard))
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=admin_message,
+                parse_mode="MarkdownV2",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+    # Сообщение клиенту
     await safe_edit_or_send(query, md2("Спасибо! Ваш заказ принят в обработку! Ожидайте подтверждения от менеджера"), parse_mode="MarkdownV2", context=context)
+
+
 
 async def cancel_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
