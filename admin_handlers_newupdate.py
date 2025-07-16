@@ -1000,7 +1000,8 @@ async def order_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    context.user_data["order_list"] = orders
+    context.user_data["order_list"] = [dict(o) for o in orders]
+
     await show_orders_text(update, context, orders, filter_type, 0)
 
 
