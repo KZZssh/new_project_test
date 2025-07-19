@@ -1489,9 +1489,9 @@ async def get_main_menu(context: ContextTypes.DEFAULT_TYPE ):
         context.user_data['cart_return_source'] = "main_menu"
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("Каталог 📦", callback_data="catalog")],
-            [InlineKeyboardButton("Поиск товара 🔎", switch_inline_query_current_chat="")],
-            [InlineKeyboardButton("История заказов 📒", callback_data="order_history")],
+            [InlineKeyboardButton("Каталог 🛍", callback_data="catalog")],
+            [InlineKeyboardButton("Поиск 🔎", switch_inline_query_current_chat="")],
+            [InlineKeyboardButton("История заказов 🚚", callback_data="order_history")],
             [InlineKeyboardButton("Корзина 🛒", callback_data="cart")],
             [InlineKeyboardButton("Помощь ℹ️", callback_data="help")]
         ]

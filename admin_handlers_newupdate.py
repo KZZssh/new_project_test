@@ -957,15 +957,15 @@ async def order_history_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     filter_keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📋 Все", callback_data="order_filter_all"),
-            InlineKeyboardButton("🟡 Активные", callback_data="order_filter_active"),
-            InlineKeyboardButton("✅ Завершённые", callback_data="order_filter_finished") , 
+            InlineKeyboardButton("📋Все", callback_data="order_filter_all"),
+            InlineKeyboardButton("🟡Активные", callback_data="order_filter_active"),
+            InlineKeyboardButton("✅Завершённые", callback_data="order_filter_finished") , 
             InlineKeyboardButton("◀ назад " , callback_data="back_to_main_menu" )
         ]
     ])
 
     await query.edit_message_text(
-        text="📋 Выберите, какие заказы хотите посмотреть:",
+        text="📋 Выберите, какие заказы хотите посмотреть:                     ",
         parse_mode=ParseMode.HTML,
         reply_markup=filter_keyboard
     )
