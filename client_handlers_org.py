@@ -1351,7 +1351,7 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
     base_sql = """
         SELECT
             p.id, p.name, p.description, p.sub_category_id, p.brand_id,
-            p.cover_url,  -- <<<<<<<<<<<<<<< ГЛАВНОЕ ИЗМЕНЕНИЕ
+            p.cover_url,
             c.name AS category,
             sc.name AS subcategory,
             b.name AS brand,
@@ -1366,7 +1366,8 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not query_text:
         # Запрос для пустого поиска (показываем случайные товары)
-        query_sql = base_sql + " WHERE p.is_active = 1 GROUP BY p.id ORDER BY RANDOM() LIMIT 10"
+        # УДАЛЕНА СТРОЧКА 'AND p.is_active = 1'
+        query_sql = base_sql + " GROUP BY p.id ORDER BY RANDOM() LIMIT 10"
         params = ()
     else:
         # Запрос для поиска по тексту
@@ -1374,10 +1375,9 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query_sql = base_sql + """
             WHERE
                 (p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ? OR sc.name LIKE ? OR b.name LIKE ?)
-                AND p.is_active = 1
             GROUP BY p.id
             ORDER BY RANDOM() LIMIT 10
-        """
+        """ # УДАЛЕНА СТРОЧКА 'AND p.is_active = 1'
         params = (search_pattern,) * 5
 
     products = await fetchall(query_sql, params)
@@ -1388,8 +1388,6 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
         brand = p["brand"] or "—"
         price = int(p["min_price"]) if p["min_price"] is not None else 0
         
-        # Просто и надежно берем ссылку на обложку.
-        # Если cover_url пустой, thumb_url будет None, и превью не будет, что логично.
         thumb_url = p["cover_url"]
 
         message_text = (
@@ -1398,7 +1396,6 @@ async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Цена от:</b> {price} ₸"
         )
         
-        # Для description можно добавить проверку, чтобы не было слишком длинно
         desc_short = (p['description'] or '')[:70] + '...' if p['description'] and len(p['description']) > 70 else p['description']
 
         result = InlineQueryResultArticle(
