@@ -676,71 +676,7 @@ async def report_combined(update, context):
     await send_products_report(update, context)
 
 
-# --- Подтверждение заказа админом ---
-async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
 
-    query = update.callback_query
-    await query.answer()
-    logging.info(f"🔥 handle_admin_decision сработал — {query.data}")
-    parts = query.data.split('_')
-    # Проверка что parts[2] — это число
-    if len(parts) < 3 or not parts[2].isdigit():
-        await query.edit_message_text("Ошибка: некорректный формат callback data.", parse_mode=ParseMode.HTML)
-        return
-    action, order_id_str = query.data.split('_')[1], query.data.split('_')[2]
-    order_id = int(order_id_str)
-    order = await fetchone("SELECT * FROM orders WHERE id = ?", (order_id,))
-    if order["status"] == "cancelled_by_client":
-        await query.edit_message_text(
-            f"⚠️ Невозможно изменить статус — заказ №{order_id} отменён клиентом.",
-            parse_mode=ParseMode.HTML
-        )
-        return
-
-    if not order:
-        await query.edit_message_text("Заказ не найден.", parse_mode=ParseMode.HTML)
-        return
-    customer_user_id = order['user_id']
-    if action == "confirm":
-        try:
-            cart = json.loads(order['cart'])
-
-            # 💥 Ключевая проверка: избежать двойного списания
-            if str(order["deducted_from_stock"]) != "1":
-                for variant_id_str, item in cart.items():
-                    await execute(
-                        "UPDATE product_variants SET quantity = quantity - ? WHERE id = ?",
-                        (item['quantity'], int(variant_id_str))
-                    )
-
-                await execute("UPDATE orders SET deducted_from_stock = 1 WHERE id = ?", (order_id,))
-
-            await execute("UPDATE orders SET status = ? WHERE id = ?", ('confirmed', order_id))
-            kb = [[InlineKeyboardButton("История заказов 🗒" , callback_data="order_history")]]
-            await context.bot.send_message(
-                chat_id=customer_user_id,
-                text= f"<b>✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные</b>",
-
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(kb)
-            )
-
-            status_buttons = [
-                [InlineKeyboardButton("🔄 Готовится к доставке", callback_data=f"status_preparing_{order_id}")],
-                [InlineKeyboardButton("🚚 Отправлен", callback_data=f"status_shipped_{order_id}")],
-                [InlineKeyboardButton("📦 Доставлен", callback_data=f"status_delivered_{order_id}")],
-                [InlineKeyboardButton("❌ Отклонить заказ", callback_data=f"admin_reject_after_confirm_{order_id}")]
-            ]
-
-            await query.edit_message_text(
-                f"Заказ №{order_id} подтверждён.\n\nВыберите следующий статус:",
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(status_buttons)
-            )
-        except Exception:
-            logging.exception("❌ Ошибка при подтверждении заказа!")
-            await query.edit_message_text("Ошибка при подтверждении заказа.", parse_mode=ParseMode.HTML)
 
 
 
@@ -864,97 +800,137 @@ async def update_order_status_admin(update: Update, context: ContextTypes.DEFAUL
 
 
 
-async def handle_admin_rejection_after_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- ЕДИНЫЙ ОБРАБОТЧИК РЕШЕНИЙ АДМИНА ---
+async def admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    logging.info(f"🔥 Универсальный обработчик решений админа: {query.data}")
 
-    order_id = int(query.data.split('_')[-1])
+    parts = query.data.split('_')
+    # Умное определение action и order_id для разных форматов коллбэка
+    if len(parts) > 3 and parts[2] == "after": # Формат admin_reject_after_confirm_13
+        action = "_".join(parts[:4])
+        order_id = int(parts[4])
+    else: # Формат admin_confirm_13 или admin_reject_13
+        action = "_".join(parts[:2])
+        order_id = int(parts[2])
+
+    # --- Получаем заказ из БД ---
     order = await fetchone("SELECT * FROM orders WHERE id = ?", (order_id,))
     if not order:
         await query.edit_message_text("❌ Заказ не найден.")
         return
 
-    # 🔐 Защита от повторного отклонения
-    if order["status"] in ("delivered", "cancelled_by_client", "rejected"):
-        await query.edit_message_text("⚠️ Заказ уже завершён или отменён.")
+    # --- Проверяем, не отменил ли его уже клиент ---
+    if order["status"] == "cancelled_by_client":
+        await query.edit_message_text(f"⚠️ Невозможно изменить статус — заказ №{order_id} отменён клиентом.")
         return
-
-    if str(order["deducted_from_stock"]) == "1":
-
+        
+    # --- ЛОГИКА ДЛЯ "ПОДТВЕРДИТЬ" ---
+    if action == "admin_confirm":
         try:
-            cart = json.loads(order["cart"])
-            for variant_id_str, item in cart.items():
-                await execute(
-                    "UPDATE product_variants SET quantity = quantity + ? WHERE id = ?",
-                    (item['quantity'], int(variant_id_str))
-                )
-            await execute("UPDATE orders SET deducted_from_stock = 0 WHERE id = ?", (order_id,))
+            cart = json.loads(order['cart'])
 
+            # 💥 Ключевая проверка: избежать двойного списания
+            if str(order["deducted_from_stock"]) != "1":
+                for variant_id_str, item in cart.items():
+                    await execute(
+                        "UPDATE product_variants SET quantity = quantity - ? WHERE id = ?",
+                        (item['quantity'], int(variant_id_str))
+                    )
+                await execute("UPDATE orders SET deducted_from_stock = 1 WHERE id = ?", (order_id,))
+
+            await execute("UPDATE orders SET status = ? WHERE id = ?", ('confirmed', order_id))
+            
+            kb = [[InlineKeyboardButton("История заказов 🗒" , callback_data="order_history")]]
+            await context.bot.send_message(
+                chat_id=order["user_id"],
+                text=f"<b>✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+
+            status_buttons = [
+                [InlineKeyboardButton("🔄 Готовится к доставке", callback_data=f"status_preparing_{order_id}")],
+                [InlineKeyboardButton("🚚 Отправлен", callback_data=f"status_shipped_{order_id}")],
+                [InlineKeyboardButton("📦 Доставлен", callback_data=f"status_delivered_{order_id}")],
+                [InlineKeyboardButton("❌ Отклонить заказ", callback_data=f"admin_reject_after_confirm_{order_id}")]
+            ]
+
+            await query.edit_message_text(
+                f"Заказ №{order_id} подтверждён.\n\nВыберите следующий статус:",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(status_buttons)
+            )
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка при возврате товаров: {e}")
-            return
-    else:
+            logging.exception(f"❌ Ошибка при подтверждении заказа: {e}")
+            await query.edit_message_text("Ошибка при подтверждении заказа.")
+
+    # --- ЛОГИКА ДЛЯ "ОТКЛОНИТЬ" (любого типа) ---
+    elif 'admin_reject' in action:
+        # --- Сначала возвращаем товары на склад, если они были списаны ---
+        if str(order["deducted_from_stock"]) == "1":
+            try:
+                cart = json.loads(order["cart"])
+                for variant_id_str, item in cart.items():
+                    await execute(
+                        "UPDATE product_variants SET quantity = quantity + ? WHERE id = ?",
+                        (item['quantity'], int(variant_id_str))
+                    )
+                await execute("UPDATE orders SET deducted_from_stock = 0 WHERE id = ?", (order_id,))
+            except Exception as e:
+                await query.edit_message_text(f"❌ Ошибка при возврате товаров: {e}")
+                return
+        
+        # --- Обновляем статус в БД ---
+        await execute("UPDATE orders SET status = ? WHERE id = ?", ("rejected", order_id))
+
+        # --- Формируем и отправляем уведомления ---
         cart = json.loads(order['cart'])
+        cart_text = "\n".join([f"• {item['name']} x{item['quantity']}" for item in cart.values()])
+        
+        username = None
+        try:
+            user_obj = await context.bot.get_chat(order["user_id"])
+            username = user_obj.username
+        except Exception:
+            pass
+        
+        user_link = f'<a href="https://t.me/{username}">@{username}</a>' if username else "нет username"
+        support_user = "candyy_sh0p" # <-- Замени на свой контакт, если нужно
+        admin_link = f'<a href="https://t.me/{support_user}">@{support_user}</a>'
 
-    # 🧾 Формируем состав заказа
-    cart_text = "\n".join([
-        f"• {item['name']} x{item['quantity']}" for item in cart.values()
-    ])
+        order_info_admin = (
+            f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
+            f"<b>Сумма:</b> {order['total_price']} ₸\n"
+            f"<b>Клиент:</b> {order['user_name']}\n"
+            f"<b>Username:</b> {user_link}\n"
+            f"<b>Телефон:</b> {order['user_phone']}\n"
+            f"<b>Адрес:</b> {order['user_address']}\n\n"
+            f"<b>Состав заказа:</b>\n{cart_text}"
+        )
+        
+        order_info_user = (
+             f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
+             f"<b>Сумма:</b> {order['total_price']} ₸\n"
+             f"<b>Клиент:</b> {order['user_name']}\n"
+             f"<b>Телефон:</b> {order['user_phone']}\n"
+             f"<b>Адрес:</b> {order['user_address']}\n\n"
+             f"<b>Состав заказа:</b>\n{cart_text}\n\n"
+             f"Админ: {admin_link}"
+        )
 
-    # 👤 Получаем username (если есть)
-    username = None
-    try:
-        user_obj = await context.bot.get_chat(order["user_id"])
-        username = user_obj.username
-    except Exception:
-        pass
+        await query.edit_message_text(
+            f"❌ Заказ №{order_id} отклонён админом.\n\n{order_info_admin}",
+            parse_mode=ParseMode.HTML
+        )
 
-    user_link = (
-        f'<a href="https://t.me/{username}">@{username}</a>' if username else "нет username"
-    )
-
-    support_user = "candyy_sh0p"
-    admin_link = f'<a href="https://t.me/{support_user}">@{support_user}</a>'
-
-    # 📦 Информация для админа
-    order_info_admin = (
-        f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
-        f"<b>Сумма:</b> {order['total_price']} ₸\n"
-        f"<b>Клиент:</b> {order['user_name']}\n"
-        f"<b>Username:</b> {user_link}\n"
-        f"<b>Телефон:</b> {order['user_phone']}\n"
-        f"<b>Адрес:</b> {order['user_address']}\n\n"
-        f"<b>Состав заказа:</b>\n{cart_text}"
-    )
-
-    # 📩 Информация для клиента
-    order_info_user = (
-        f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
-        f"<b>Сумма:</b> {order['total_price']} ₸\n"
-        f"<b>Клиент:</b> {order['user_name']}\n"
-        f"<b>Телефон:</b> {order['user_phone']}\n"
-        f"<b>Адрес:</b> {order['user_address']}\n\n"
-        f"<b>Состав заказа:</b>\n{cart_text}\n\n"
-        f"Админ: {admin_link}"
-    )
-
-    # ❌ Обновляем статус
-    await execute("UPDATE orders SET status = ? WHERE id = ?", ("rejected", order_id))
-
-    # 🛑 Уведомляем админа
-    await query.edit_message_text(
-        f"❌ Заказ №{order_id} отклонён админом.\n\n{order_info_admin}",
-        parse_mode=ParseMode.HTML
-    )
-
-    # 📩 Уведомляем клиента
-    await context.bot.send_message(
-        chat_id=order["user_id"],
-        text=f"❌ Ваш заказ №{order_id} был отклонен администратором.\n\n{order_info_user}",
-        parse_mode=ParseMode.HTML
-    )
-
-
+        await context.bot.send_message(
+            chat_id=order["user_id"],
+            text=f"❌ Ваш заказ №{order_id} был отклонен администратором.\n\n{order_info_user}",
+            parse_mode=ParseMode.HTML
+        )
 
 
 # --- Статусы ---
@@ -1833,4 +1809,4 @@ cat_rename_text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, catego
 report_handler = CallbackQueryHandler(report_combined, pattern=r"^admin_report$")
 orders_report_handler = CallbackQueryHandler(ask_orders_report_period, pattern=r"^admin_orders_report$")
 orders_report_period_handler = CallbackQueryHandler(handle_orders_report_period, pattern=r"^orders_report_(today|3days|7days|30days)$")
-admin_decision_handler = CallbackQueryHandler(handle_admin_decision, pattern=r"^admin_(confirm|reject)_\d+$")
+admin_decision_handler = CallbackQueryHandler(admin_decision, pattern=r"^(admin_confirm|admin_reject|admin_reject_after_confirm)_\d+$")

@@ -26,7 +26,7 @@ from admin_handlers_newupdate import (
     get_new_size_name, get_new_color_name, get_variant_price, get_variant_quantity,
      update_order_status_admin, order_history_handler, order_filter_handler,
     cancel_from_history_handler, confirm_cancel_from_history, back_to_order_history,
-    pagination_handler, handle_admin_rejection_after_confirm
+    pagination_handler
 )
 from client_handlers_org import (
     start_handler, catalog_handler, reply_cart_handler, subcategories_handler, brands_handler,
@@ -101,7 +101,6 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"), group=1)
     application.add_handler(CallbackQueryHandler(pagination_handler, pattern="^page_"), group=1)
     application.add_handler(CallbackQueryHandler(cancel_from_history_handler, pattern="^cancel_from_history_"), group=1)
-    application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"), group=1)
     application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"), group=1)
     application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"), group=1)
     application.add_handler(CallbackQueryHandler(noop_handler, pattern="^noop$"), group=1) # Пустышка, чтобы кнопка не "залипала"
