@@ -1,11 +1,10 @@
 import asyncio
 import aiosqlite
 import logging
-
+from configs import DB_FILE
 # Настройка логирования, чтобы видеть процесс
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-DB_PATH = 'data/database.db' # <<< УКАЖИ ЗДЕСЬ ПРАВИЛЬНЫЙ ПУТЬ К ТВОЕЙ БАЗЕ ДАННЫХ
 
 async def fix_old_products():
     """
@@ -15,7 +14,7 @@ async def fix_old_products():
     updated_count = 0
     not_found_count = 0
 
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row  # Чтобы можно было обращаться к колонкам по имени
 
         # 1. Находим все товары, у которых НЕТ обложки
