@@ -392,6 +392,24 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                                 (variant_id, file_id, photo_url, is_video, order)
                             )
                             context.user_data['media_order'] += 1
+
+                            # ===================================================================
+                            # НАЧАЛО ИЗМЕНЕНИЙ: БЕЗОПАСНО УСТАНАВЛИВАЕМ ОБЛОЖКУ
+                            # ===================================================================
+                            product_id = context.user_data.get('product_id')
+                            if product_id:
+                                # 1. Проверяем, есть ли у товара уже обложка
+                                product_data = await fetchone("SELECT cover_url FROM products WHERE id = ?", (product_id,))
+                                
+                                # 2. Если обложки НЕТ (поле пустое), то устанавливаем ее.
+                                #    Эта проверка сработает только ОДИН РАЗ за всю жизнь товара.
+                                if product_data and not product_data['cover_url']:
+                                    await execute("UPDATE products SET cover_url = ? WHERE id = ?", (photo_url, product_id))
+                                    logging.info(f"✅ Установлена обложка для товара ID {product_id}")
+                            # ===================================================================
+                            # КОНЕЦ ИЗМЕНЕНИЙ
+                            # ===================================================================
+
                             if order == 0:
                                 await execute(
                                     "UPDATE product_variants SET photo_id = ?, photo_url = ? WHERE id = ?",

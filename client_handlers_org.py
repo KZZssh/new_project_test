@@ -1344,103 +1344,83 @@ from telegram import InlineQueryResultArticle, InputTextMessageContent, InlineKe
 
 
 async def inlinequery(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает инлайн-запросы для поиска товаров."""
     query_text = update.inline_query.query.strip()
 
+    # Базовый SQL-запрос теперь напрямую выбирает cover_url
+    base_sql = """
+        SELECT
+            p.id, p.name, p.description, p.sub_category_id, p.brand_id,
+            p.cover_url,  -- <<<<<<<<<<<<<<< ГЛАВНОЕ ИЗМЕНЕНИЕ
+            c.name AS category,
+            sc.name AS subcategory,
+            b.name AS brand,
+            MIN(pv.price) AS min_price
+        FROM
+            products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
+        LEFT JOIN brands b ON p.brand_id = b.id
+        LEFT JOIN product_variants pv ON p.id = pv.product_id
+    """
+
     if not query_text:
-        query_sql = """
-            SELECT p.id, p.name, p.description,
-                   p.sub_category_id, p.brand_id,
-                   c.name AS category,
-                   sc.name AS subcategory,
-                   b.name AS brand,
-                   MIN(pv.price) AS min_price,
-                   (
-                       SELECT pm.url
-                       FROM product_variants pv2
-                       JOIN product_media pm ON pm.variant_id = pv2.id
-                       WHERE pv2.product_id = p.id AND pm.is_video = 0 AND pm.url IS NOT NULL
-                       ORDER BY pm."order" ASC LIMIT 1
-                   ) AS photo_url
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
-            LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
-            LEFT JOIN brands b ON p.brand_id = b.id
-            LEFT JOIN product_variants pv ON p.id = pv.product_id
-            GROUP BY p.id
-            ORDER BY RANDOM() LIMIT 10
-        """
+        # Запрос для пустого поиска (показываем случайные товары)
+        query_sql = base_sql + " WHERE p.is_active = 1 GROUP BY p.id ORDER BY RANDOM() LIMIT 10"
         params = ()
     else:
-        query_sql = """
-            SELECT p.id, p.name, p.description,
-                   p.sub_category_id, p.brand_id,
-                   c.name AS category,
-                   sc.name AS subcategory,
-                   b.name AS brand,
-                   MIN(pv.price) AS min_price,
-                    (
-                    SELECT pm.url
-                    FROM product_media pm
-                    JOIN product_variants pv2 ON pv2.id = pm.variant_id
-                    WHERE pv2.product_id = p.id
-                    AND pm.is_video = 0
-                    AND pm.url IS NOT NULL
-                    ORDER BY pm.id ASC
-                    LIMIT 1
-                    ) AS photo_url
-
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
-            LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
-            LEFT JOIN brands b ON p.brand_id = b.id
-            LEFT JOIN product_variants pv ON p.id = pv.product_id
-            WHERE p.name LIKE ? OR p.description LIKE ? OR
-                  c.name LIKE ? OR sc.name LIKE ? OR b.name LIKE ?
+        # Запрос для поиска по тексту
+        search_pattern = f"%{query_text}%"
+        query_sql = base_sql + """
+            WHERE
+                (p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ? OR sc.name LIKE ? OR b.name LIKE ?)
+                AND p.is_active = 1
             GROUP BY p.id
             ORDER BY RANDOM() LIMIT 10
         """
-        params = (f"%{query_text}%",) * 5
+        params = (search_pattern,) * 5
 
     products = await fetchall(query_sql, params)
 
     results = []
     for p in products:
         name = p["name"]
-        desc = p["description"] or "—"
-        category = p["category"] or "—"
-        subcat = p["subcategory"] or "—"
         brand = p["brand"] or "—"
-        price = int(p["min_price"]) if p["min_price"] else 0
-        thumb_url = p["photo_url"]
+        price = int(p["min_price"]) if p["min_price"] is not None else 0
+        
+        # Просто и надежно берем ссылку на обложку.
+        # Если cover_url пустой, thumb_url будет None, и превью не будет, что логично.
+        thumb_url = p["cover_url"]
 
-        subcat_id = p['sub_category_id'] or 0
-        brand_id = p['brand_id'] or 0
-
-        message = (
+        message_text = (
             f"<b>{name}</b>\n\n"
-            f"{desc}\n\n"
-            f"<b>Категория:</b> {category}\n"
-            f"<b>Раздел:</b> {subcat}\n"
             f"<b>Бренд:</b> {brand}\n"
             f"<b>Цена от:</b> {price} ₸"
         )
+        
+        # Для description можно добавить проверку, чтобы не было слишком длинно
+        desc_short = (p['description'] or '')[:70] + '...' if p['description'] and len(p['description']) > 70 else p['description']
 
         result = InlineQueryResultArticle(
             id=f"prod_{p['id']}",
             title=name,
             description=f"{brand} · от {price} ₸",
+            thumbnail_url=thumb_url,
             input_message_content=InputTextMessageContent(
-                message,
+                message_text=message_text,
                 parse_mode="HTML"
             ),
-            thumbnail_url=thumb_url if thumb_url else None,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📦 Подробнее", callback_data=f"details_{p['id']}_{subcat_id}_{brand_id}")]
-            ])
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "📦 Подробнее",
+                    callback_data=f"details_{p['id']}_{p['sub_category_id'] or 0}_{p['brand_id'] or 0}"
+                )
+            ]])
         )
         results.append(result)
 
     await update.inline_query.answer(results, cache_time=1)
+
 
 
 
