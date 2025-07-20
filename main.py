@@ -58,82 +58,85 @@ async def main() -> None:
         Application.builder().token(BOT_TOKEN).persistence(persistence).build()
     )
 
-    # --- Барлық обработчиктерді тіркеу ---
-    
-    application.add_handler(CommandHandler("d" , d))
-    application.add_handler(start_handler)
-
-    
-     # АДМИНСКИЙ ИНТЕРФЕЙС
-    
-
-   
-    
-    application.add_handler(CallbackQueryHandler(update_order_status_admin, pattern=r"^status_(preparing|shipped|delivered)_\d+$"))
-    application.add_handler(CallbackQueryHandler(order_history_handler, pattern="^order_history$"))
-    application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"))
-    application.add_handler(CallbackQueryHandler(pagination_handler, pattern="^page_"))
-    application.add_handler(CallbackQueryHandler(cancel_from_history_handler, pattern="^cancel_from_history_"))
-    application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"))
-    application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"))
-    application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"))
-    application.add_handler(CallbackQueryHandler(noop_handler, pattern="^noop$"))
-
-    application.add_handler(add_product_conv)
-    application.add_handler(brand_manage_handler)
-    application.add_handler(brand_rename_conv)
-    application.add_handler(admin_conv)
-
-    
-    
-    application.add_handler(cat_manage_handler)
-    application.add_handler(subcat_manage_handler)
-    application.add_handler(subcat_rename_conv)
-    application.add_handler(report_handler)
-    application.add_handler(orders_report_handler)
-    application.add_handler(orders_report_period_handler)
-    application.add_handler(admin_decision_handler)
-    application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog))
-    
-    
-    
-    application.add_handler(catalog_handler)
-    application.add_handler(reply_cart_handler)
-    application.add_handler(subcategories_handler)
-    application.add_handler(brands_handler)
-    application.add_handler(brand_slider_handler)
-    application.add_handler(all_slider_handler)
-    application.add_handler(brand_slider_nav_handler)
-    application.add_handler(all_slider_nav_handler)
-    application.add_handler(details_handler)
-    application.add_handler(choose_color_handler)
-    application.add_handler(choose_size_handler)
-    application.add_handler(back_to_slider_handler)
-    application.add_handler(back_to_brands_handler)
-    application.add_handler(back_to_main_cat_handler)
-    application.add_handler(add_to_cart_handler)
-    application.add_handler(cart_handler)
-    application.add_handler(cart_back_handler)
-    application.add_handler(cart_plus_handler)
-    application.add_handler(cart_minus_handler)
-    application.add_handler(clear_cart_handler)
-    
-    
-
-    application.add_handler(payment_confirmation_handler)
-    application.add_handler(checkout_handler)
-    application.add_handler(CallbackQueryHandler(color_photo_pagination, pattern=r"^colorphoto_\d+_\d+_\d+$"))
-    application.add_handler(InlineQueryHandler(inlinequery))
-    application.add_handler(CallbackQueryHandler(cancel_by_client, pattern=r"^cancel_by_client_\d+$"))
-    application.add_handler(CallbackQueryHandler(confirm_cancel, pattern=r"^confirm_cancel_\d+$"))
-    application.add_handler(CallbackQueryHandler(back_to_payment, pattern=r"^back_to_payment_\d+$"))
-    application.add_handler(help_handler)
-    application.add_handler(reply_main_menu_handler)
-    application.add_handler(back_to_main_menu_handler)
+    # === ГРУППА -1: ОТЛАДКА (Ловит всё, но не мешает) ===
+    # Этот хендлер просто логгирует ВСЕ нажатия на кнопки. Очень полезно для дебага.
+    # block=False означает, что после него обработка пойдет дальше.
     application.add_handler(
-    CallbackQueryHandler(debug_all_callback, pattern=".*", block=False),
-    group=999  # ← вот сюда
-)
+        CallbackQueryHandler(debug_all_callback, pattern=".*", block=False), 
+        group=-1
+    )
+
+    # === ГРУППА 0: ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ (Работают всегда и везде) ===
+    # Эти команды и коллбэки должны срабатывать, даже если админ находится внутри диалога.
+    
+    # Самый важный - обработчик кнопок подтверждения/отклонения заказа
+    application.add_handler(admin_decision_handler, group=0)
+    
+    # Глобальные команды, которые должны быть доступны всегда
+    application.add_handler(start_handler, group=0)
+    application.add_handler(help_handler, group=0)
+    
+    # Глобальный обработчик для выхода из любого диалога
+    application.add_handler(MessageHandler(filters.COMMAND, cancel_dialog), group=0)
+
+
+    # === ГРУППА 1: ОСНОВНЫЕ ОБРАБОТЧИКИ И ДИАЛОГИ ===
+    # Сюда идет вся основная логика твоего бота.
+    
+    # --- ДИАЛОГИ (ConversationHandlers) ---
+    application.add_handler(add_product_conv, group=1)
+    application.add_handler(brand_rename_conv, group=1)
+    application.add_handler(admin_conv, group=1)
+    application.add_handler(subcat_rename_conv, group=1)
+    
+    # --- ОБРАБОТЧИКИ АДМИН-ПАНЕЛИ (не в диалогах) ---
+    application.add_handler(report_handler, group=1)
+    application.add_handler(cat_manage_handler, group=1)
+    application.add_handler(subcat_manage_handler, group=1)
+    application.add_handler(brand_manage_handler, group=1)
+    application.add_handler(orders_report_handler, group=1)
+    application.add_handler(orders_report_period_handler, group=1)
+    application.add_handler(CallbackQueryHandler(update_order_status_admin, pattern=r"^status_(preparing|shipped|delivered)_\d+$"), group=1)
+    application.add_handler(CallbackQueryHandler(order_history_handler, pattern="^order_history$"), group=1)
+    application.add_handler(CallbackQueryHandler(order_filter_handler, pattern="^order_filter_"), group=1)
+    application.add_handler(CallbackQueryHandler(pagination_handler, pattern="^page_"), group=1)
+    application.add_handler(CallbackQueryHandler(cancel_from_history_handler, pattern="^cancel_from_history_"), group=1)
+    application.add_handler(CallbackQueryHandler(handle_admin_rejection_after_confirm, pattern=r"^admin_reject_after_confirm_\d+$"), group=1)
+    application.add_handler(CallbackQueryHandler(confirm_cancel_from_history, pattern="^confirm_cancel_from_history_"), group=1)
+    application.add_handler(CallbackQueryHandler(back_to_order_history, pattern="^back_to_order_history$"), group=1)
+    application.add_handler(CallbackQueryHandler(noop_handler, pattern="^noop$"), group=1) # Пустышка, чтобы кнопка не "залипала"
+    
+    # --- ОБРАБОТЧИКИ КЛИЕНТСКОЙ ЧАСТИ ---
+    application.add_handler(CommandHandler("d", d), group=1) # Твоя команда для дебага
+    application.add_handler(catalog_handler, group=1)
+    application.add_handler(reply_cart_handler, group=1)
+    application.add_handler(subcategories_handler, group=1)
+    application.add_handler(brands_handler, group=1)
+    application.add_handler(brand_slider_handler, group=1)
+    application.add_handler(all_slider_handler, group=1)
+    application.add_handler(brand_slider_nav_handler, group=1)
+    application.add_handler(all_slider_nav_handler, group=1)
+    application.add_handler(details_handler, group=1)
+    application.add_handler(choose_color_handler, group=1)
+    application.add_handler(choose_size_handler, group=1)
+    application.add_handler(back_to_slider_handler, group=1)
+    application.add_handler(back_to_brands_handler, group=1)
+    application.add_handler(back_to_main_cat_handler, group=1)
+    application.add_handler(add_to_cart_handler, group=1)
+    application.add_handler(cart_handler, group=1)
+    application.add_handler(cart_back_handler, group=1)
+    application.add_handler(cart_plus_handler, group=1)
+    application.add_handler(cart_minus_handler, group=1)
+    application.add_handler(clear_cart_handler, group=1)
+    application.add_handler(payment_confirmation_handler, group=1)
+    application.add_handler(checkout_handler, group=1)
+    application.add_handler(CallbackQueryHandler(color_photo_pagination, pattern=r"^colorphoto_\d+_\d+_\d+$"), group=1)
+    application.add_handler(InlineQueryHandler(inlinequery), group=1)
+    application.add_handler(CallbackQueryHandler(cancel_by_client, pattern=r"^cancel_by_client_\d+$"), group=1)
+    application.add_handler(CallbackQueryHandler(confirm_cancel, pattern=r"^confirm_cancel_\d+$"), group=1)
+    application.add_handler(CallbackQueryHandler(back_to_payment, pattern=r"^back_to_payment_\d+$"), group=1)
+    application.add_handler(reply_main_menu_handler, group=1)
+    application.add_handler(back_to_main_menu_handler, group=1)
 
 
     
