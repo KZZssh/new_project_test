@@ -15,29 +15,22 @@ from functools import wraps
 def pre_run_cleanup(func):
     """
     Декоратор-экзорцист. Перед запуском любой важной функции,
-    он МОЛЧА и БЕЗОПАСНО убивает любой "зависший" диалог.
+    он МОЛЧА и БЕЗОПАСНО убивает ключ состояния любого "зависшего" диалога.
     """
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         
-        # Ищем "призрака" диалога в данных пользователя
-        active_conversation = False
+        # Просто ищем "призрака" диалога и удаляем его ключ состояния из user_data
         for key in list(context.user_data.keys()):
             if isinstance(key, tuple) and key[1] == 'conversation_state':
-                logging.warning(f"Найден зависший диалог для user_id {user_id}. Принудительно завершаю.")
+                logging.warning(f"Найден и удален зависший диалог для user_id {user_id}.")
                 del context.user_data[key]
-                active_conversation = True
 
-        if active_conversation:
-            # Если нашли и убили призрака, нужно завершить ConversationHandler
-            await context.application.resolve_handler(ConversationHandler.END).handle_update(update, context)
-
-        # Теперь, когда все чисто, запускаем основную функцию
+        # После очистки просто запускаем основную функцию, как и должны были.
         return await func(update, context, *args, **kwargs)
         
     return wrapper
-
 
 
 def convert_to_local_time(utc_str):
