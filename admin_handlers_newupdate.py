@@ -1678,7 +1678,28 @@ async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TY
     await manage_subcategories(update, context)
     return ConversationHandler.END
 
+async def silent_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """ Эта функция МОЛЧА отменяет любой диалог, не отправляя сообщений. """
+    
+    # Это хорошая практика, чтобы убить все "зависшие" диалоги, 
+    # просто на всякий случай.
+    for key in list(context.user_data.keys()):
+        if "conversation" in str(key) or isinstance(key, tuple):
+             del context.user_data[key]
+             
+    return ConversationHandler.END
 
+async def smart_admin_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Эта функция сначала проверяет, есть ли активный диалог, и отменяет его,
+    а затем вызывает главное меню админки.
+    """
+    # Сначала вызываем твою функцию отмены. Она сработает, только если есть активный диалог.
+    await silent_cancel(update, context) 
+    
+    # А теперь вызываем твою обычную функцию для показа админ-меню.
+    # Замени admin_menu_command на НАСТОЯЩЕЕ имя твоей функции, которая отправляет админ-панель.
+    await admin_menu_entry(update, context) 
 # =================================================================
 # === СОЗДАНИЕ HANDLERS ===
 # =================================================================
@@ -1719,7 +1740,7 @@ add_product_conv = ConversationHandler(
 
 # ЕДИНЫЙ обработчик для всей админ-панели и редактирования
 admin_conv = ConversationHandler(
-    entry_points=[CommandHandler("admin", admin_menu_entry)],
+    entry_points=[CommandHandler("admin", smart_admin_entry)],
     states={
         ADMIN_MENU_AWAIT: [
             CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_")
