@@ -1761,7 +1761,8 @@ add_product_conv = ConversationHandler(
     per_user=True,
     per_chat=True,
     persistent=True, 
-    name="add_product_conversation"
+    name="add_product_conversation" , 
+    allow_reentry=True
 )
 
 
