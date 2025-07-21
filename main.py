@@ -61,7 +61,7 @@ async def main() -> None:
     # === ГРУППА -1: ОТЛАДКА (Ловит всё, но не мешает) ===
     # Этот хендлер просто логгирует ВСЕ нажатия на кнопки. Очень полезно для дебага.
     # block=False означает, что после него обработка пойдет дальше.
-    application.add_handler(MessageHandler(filters.COMMAND, cleanup_handler), group=-1)
+    #application.add_handler(MessageHandler(filters.COMMAND, cleanup_handler), group=-1)
     application.add_handler(
         CallbackQueryHandler(debug_all_callback, pattern=".*", block=False), 
         group=-1

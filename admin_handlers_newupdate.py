@@ -10,8 +10,29 @@ from configs import ADMIN_IDS, FLASK_UPLOAD_URL
 from db import fetchall, fetchone, execute
 import pytz
 from datetime import datetime
+from functools import wraps
 
 
+def cleanup_before_entry(func):
+    """
+    Декоратор-экзорцист. Кез келген диалогты бастамас бұрын,
+    алдымен ескі, "қатып қалған" диалогты МОЛЧА және ҚАУІПСІЗ жояды.
+    """
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        
+        # `user_data`-дан диалогтың күйін тауып, жоямыз
+        for key in list(context.user_data.keys()):
+            if isinstance(key, tuple) and key[1] == 'conversation_state':
+                logging.warning(f"Тазалаушы: {user_id} үшін қатып қалған диалог табылып, жойылды.")
+                del context.user_data[key]
+                # ConversationHandler-ді тоқтатудың қажеті жоқ, тек күйді тазаласақ жеткілікті.
+
+        # Тазалап болған соң, негізгі функцияны іске қосамыз
+        return await func(update, context, *args, **kwargs)
+        
+    return wrapper
 
 def convert_to_local_time(utc_str):
     """Конвертирует строку с датой UTC в локальное время Астаны (GMT+5)."""
@@ -135,7 +156,7 @@ async def create_new_entity(name: str, table_name: str, category_id: int = None)
 # =================================================================
 
 # 1. Начало (Entry Point)
-
+@cleanup_before_entry
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Начинает диалог добавления товара."""
     query = update.callback_query
@@ -1361,7 +1382,7 @@ async def handle_subcat_manage(update, context):
 
 
 RENAME_SUBCAT = 2002
-
+@cleanup_before_entry
 async def start_rename_subcat(update, context):
     query = update.callback_query
     await query.answer()
@@ -1467,7 +1488,7 @@ async def handle_brand_manage(update, context):
 from telegram.ext import ConversationHandler, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 RENAME_BRAND = 2001
-
+@cleanup_before_entry
 async def start_rename_brand(update, context):
     query = update.callback_query
     await query.answer()
@@ -1526,6 +1547,7 @@ def admin_menu_keyboard():
         [InlineKeyboardButton("📦 Отчёт по заказам", callback_data="admin_orders_report")],
     ])
 
+@cleanup_before_entry
 async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
 
