@@ -82,14 +82,25 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Прерывает диалог в любом месте."""
-    context.user_data.clear()
-    message = "Действие отменено."
-    if update.callback_query:
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=message)
+    """
+    Умная отмена: Завершает любой диалог. 
+    Отправляет сообщение "Действие отменено", только если была вызвана командой /cancel.
+    """
+    user = update.effective_user
+    
+    # Проверяем, было ли это сообщение от пользователя и был ли его текст /cancel
+    if update.message and update.message.text == '/cancel':
+        logging.info(f"Пользователь {user.first_name} отменил диалог командой /cancel.")
+        await update.message.reply_text("Действие отменено.")
     else:
-        await update.message.reply_text(message)
+        # Если сюда попала другая команда (например, /admin из fallbacks), просто молчим.
+        logging.info(f"Диалог для пользователя {user.first_name} был автоматически завершен.")
+
+    # Очистка user_data от состояний FSM - это хорошая практика
+    for key in list(context.user_data.keys()):
+        if isinstance(key, tuple) and len(key) > 1 and key[1] == 'conversation_state':
+            del context.user_data[key]
+            
     return ConversationHandler.END
 
 async def create_new_entity(name: str, table_name: str, category_id: int = None) -> int:
@@ -1727,7 +1738,7 @@ add_product_conv = ConversationHandler(
         ],
         ADD_ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")]
     },
-    fallbacks=[CommandHandler("cancel", cancel_dialog)],
+    fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
     per_user=True,
     per_chat=True,
     persistent=True, 
@@ -1783,7 +1794,7 @@ admin_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id)
         ],
     },
-    fallbacks=[CommandHandler("cancel", cancel_dialog)],
+    fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
     persistent=True, name="admin_panel_conversation"
 )
 
