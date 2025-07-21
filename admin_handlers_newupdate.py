@@ -85,7 +85,8 @@ def is_admin(user_id: int) -> bool:
 
 async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Простая и надежная отмена. Завершает диалог и сообщает об этом."""
-    await update.message.reply_text("Действие отменено.")
+    if update.message:
+        await update.message.reply_text("Действие отменено.")
     return ConversationHandler.END
 
 async def create_new_entity(name: str, table_name: str, category_id: int = None) -> int:
