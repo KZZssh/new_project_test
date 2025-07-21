@@ -10,6 +10,35 @@ from configs import ADMIN_IDS, FLASK_UPLOAD_URL
 from db import fetchall, fetchone, execute
 import pytz
 from datetime import datetime
+from functools import wraps
+
+def pre_run_cleanup(func):
+    """
+    Декоратор-экзорцист. Перед запуском любой важной функции,
+    он МОЛЧА и БЕЗОПАСНО убивает любой "зависший" диалог.
+    """
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        
+        # Ищем "призрака" диалога в данных пользователя
+        active_conversation = False
+        for key in list(context.user_data.keys()):
+            if isinstance(key, tuple) and key[1] == 'conversation_state':
+                logging.warning(f"Найден зависший диалог для user_id {user_id}. Принудительно завершаю.")
+                del context.user_data[key]
+                active_conversation = True
+
+        if active_conversation:
+            # Если нашли и убили призрака, нужно завершить ConversationHandler
+            await context.application.resolve_handler(ConversationHandler.END).handle_update(update, context)
+
+        # Теперь, когда все чисто, запускаем основную функцию
+        return await func(update, context, *args, **kwargs)
+        
+    return wrapper
+
+
 
 def convert_to_local_time(utc_str):
     """Конвертирует строку с датой UTC в локальное время Астаны (GMT+5)."""
@@ -124,6 +153,7 @@ async def create_new_entity(name: str, table_name: str, category_id: int = None)
 # =================================================================
 
 # 1. Начало (Entry Point)
+@pre_run_cleanup
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Начинает диалог добавления товара."""
     query = update.callback_query
@@ -1349,7 +1379,7 @@ async def handle_subcat_manage(update, context):
 
 
 RENAME_SUBCAT = 2002
-
+@pre_run_cleanup
 async def start_rename_subcat(update, context):
     query = update.callback_query
     await query.answer()
@@ -1455,7 +1485,7 @@ async def handle_brand_manage(update, context):
 from telegram.ext import ConversationHandler, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 RENAME_BRAND = 2001
-
+@pre_run_cleanup
 async def start_rename_brand(update, context):
     query = update.callback_query
     await query.answer()
@@ -1515,7 +1545,7 @@ def admin_menu_keyboard():
     ])
 
 
-
+@pre_run_cleanup
 async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
 
@@ -1691,6 +1721,10 @@ async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 
+
+
+
+
 # =================================================================
 # === СОЗДАНИЕ HANDLERS ===
 # =================================================================
@@ -1718,8 +1752,8 @@ add_product_conv = ConversationHandler(
         ],
         ADD_ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")]
     },
-    fallbacks=[CommandHandler("admin", admin_menu_entry),
-        MessageHandler(filters.COMMAND, cancel_dialog)
+    fallbacks=[
+        CommandHandler("cancel", cancel_dialog)
         ],
     per_user=True,
     per_chat=True,
@@ -1777,10 +1811,10 @@ admin_conv = ConversationHandler(
         ],
     },
     fallbacks=[
-        MessageHandler(filters.COMMAND, cancel_dialog)
+        CommandHandler("cancel", cancel_dialog)
               ],
     persistent=True, name="admin_panel_conversation",
-    allow_reentry=True
+    
 )
 
 
@@ -1791,7 +1825,7 @@ subcat_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_subcat),
         ],
     },
-    fallbacks=[CommandHandler("admin", admin_menu_entry),
+    fallbacks=[
         MessageHandler(filters.COMMAND, cancel_rename_subcat)
         ],
     per_user=True,
@@ -1805,7 +1839,7 @@ brand_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_brand),
         ],
     },
-    fallbacks=[CommandHandler("admin", admin_menu_entry),
+    fallbacks=[
         MessageHandler(filters.COMMAND, cancel_rename_brand)
         ],
     per_user=True,
