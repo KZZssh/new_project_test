@@ -1689,20 +1689,18 @@ async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TY
     await manage_subcategories(update, context)
     return ConversationHandler.END
 
-async def silent_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ Эта функция МОЛЧА отменяет любой диалог. """
-    return ConversationHandler.END
-
-async def smart_admin_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def switch_to_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Умный вход в админку: сначала ТИХО отменяет любой диалог,
-    а затем вызывает главное меню и ПРАВИЛЬНО запускает диалог.
+    Эта функция используется в fallbacks других диалогов.
+    Она корректно завершает текущий диалог и СРАЗУ ЖЕ запускает админ-панель.
     """
-    # Сначала тихо завершаем предыдущий диалог, если он был
-    await silent_cancel(update, context) 
+    logging.info("Переключение на админ-панель из другого диалога...")
     
-    # А теперь вызываем твою обычную функцию и ВОЗВРАЩАЕМ ее результат
+    # Просто вызываем entry_point для админ-панели.
+    # Библиотека сама поймет, что нужно завершить старый диалог и начать новый.
+    # Убедись, что 'admin_menu_entry' - это ПРАВИЛЬНОЕ имя твоей функции.
     return await admin_menu_entry(update, context)
+
 # =================================================================
 # === СОЗДАНИЕ HANDLERS ===
 # =================================================================
@@ -1730,7 +1728,9 @@ add_product_conv = ConversationHandler(
         ],
         ADD_ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")]
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
+    fallbacks=[CommandHandler("admin", switch_to_admin_panel),
+        MessageHandler(filters.COMMAND, cancel_dialog)
+        ],
     per_user=True,
     per_chat=True,
     persistent=True, 
@@ -1743,7 +1743,7 @@ add_product_conv = ConversationHandler(
 
 # ЕДИНЫЙ обработчик для всей админ-панели и редактирования
 admin_conv = ConversationHandler(
-    entry_points=[CommandHandler("admin", smart_admin_entry)],
+    entry_points=[CommandHandler("admin", admin_menu_entry)],
     states={
         ADMIN_MENU_AWAIT: [
             CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_")
@@ -1786,7 +1786,9 @@ admin_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id)
         ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_dialog)],
+    fallbacks=[
+        MessageHandler(filters.COMMAND, cancel_dialog)
+              ],
     persistent=True, name="admin_panel_conversation"
 )
 
@@ -1798,7 +1800,9 @@ subcat_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_subcat),
         ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_subcat)],
+    fallbacks=[CommandHandler("admin", switch_to_admin_panel),
+        MessageHandler(filters.COMMAND, cancel_rename_subcat)
+        ],
     per_user=True,
     per_chat=True
 )
@@ -1810,7 +1814,9 @@ brand_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_brand),
         ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_brand)],
+    fallbacks=[CommandHandler("admin", switch_to_admin_panel),
+        MessageHandler(filters.COMMAND, cancel_rename_brand)
+        ],
     per_user=True,
     per_chat=True,
 )
