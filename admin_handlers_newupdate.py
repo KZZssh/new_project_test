@@ -1690,27 +1690,19 @@ async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TY
     return ConversationHandler.END
 
 async def silent_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ Эта функция МОЛЧА отменяет любой диалог, не отправляя сообщений. """
-    
-    # Это хорошая практика, чтобы убить все "зависшие" диалоги, 
-    # просто на всякий случай.
-    for key in list(context.user_data.keys()):
-        if "conversation" in str(key) or isinstance(key, tuple):
-             del context.user_data[key]
-             
+    """ Эта функция МОЛЧА отменяет любой диалог. """
     return ConversationHandler.END
 
 async def smart_admin_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Эта функция сначала проверяет, есть ли активный диалог, и отменяет его,
-    а затем вызывает главное меню админки.
+    Умный вход в админку: сначала ТИХО отменяет любой диалог,
+    а затем вызывает главное меню и ПРАВИЛЬНО запускает диалог.
     """
-    # Сначала вызываем твою функцию отмены. Она сработает, только если есть активный диалог.
+    # Сначала тихо завершаем предыдущий диалог, если он был
     await silent_cancel(update, context) 
     
-    # А теперь вызываем твою обычную функцию для показа админ-меню.
-    # Замени admin_menu_command на НАСТОЯЩЕЕ имя твоей функции, которая отправляет админ-панель.
-    await admin_menu_entry(update, context) 
+    # А теперь вызываем твою обычную функцию и ВОЗВРАЩАЕМ ее результат
+    return await admin_menu_entry(update, context)
 # =================================================================
 # === СОЗДАНИЕ HANDLERS ===
 # =================================================================
