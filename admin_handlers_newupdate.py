@@ -131,7 +131,7 @@ async def cleanup_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Простая и надежная отмена. Завершает диалог и сообщает об этом."""
-    if update.message:
+    if update.message and update.message.text == '/cancel':
         await update.message.reply_text("Действие отменено.")
     return ConversationHandler.END
 
