@@ -83,6 +83,31 @@ def get_effective_message(update):
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
+async def cleanup_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Бұл "тазалаушы" басқаларынан бұрын жұмыс істейді. Ол жаңа диалогты
+    бастайтын команда келгенде, ескі "қатып қалған" диалогты тауып, үнсіз жояды.
+    Бұл функция update-ті тоқтатпайды, тек тазалап, әрі қарай жібереді.
+    """
+    # Егер бұл команда болмаса, ештеңе істемейміз
+    if not (update.message and update.message.text and update.message.text.startswith('/')):
+        return
+
+    command = update.message.text
+    # Тазалауды қажет ететін негізгі командалар
+    reset_commands = ['/admin', '/start', '/cancel'] 
+    
+    if command in reset_commands:
+        user_id = update.effective_user.id
+        # `user_data`-дан диалогтың күйін тауып, жоямыз
+        for key in list(context.user_data.keys()):
+            if isinstance(key, tuple) and key[1] == 'conversation_state':
+                logging.warning(f"Тазалаушы: {user_id} үшін қатып қалған диалог табылып, жойылды ('{command}' командасының алдында).")
+                del context.user_data[key]
+                break # Бір ғана күй болуы керек
+
+
+
 async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Простая и надежная отмена. Завершает диалог и сообщает об этом."""
     if update.message:
@@ -1708,7 +1733,7 @@ add_product_conv = ConversationHandler(
         ADD_ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")]
     },
     fallbacks=[
-        CommandHandler("admin" , admin_menu_entry),
+        
         CommandHandler("cancel", cancel_dialog)
         ],
     per_user=True,
@@ -1783,7 +1808,7 @@ subcat_rename_conv = ConversationHandler(
         ],
     },
     fallbacks=[
-        CommandHandler("admin", admin_menu_entry), 
+        
         MessageHandler(filters.COMMAND, cancel_rename_subcat)
         ],
     per_user=True,
@@ -1798,7 +1823,7 @@ brand_rename_conv = ConversationHandler(
         ],
     },
     fallbacks=[
-        CommandHandler("admin", admin_menu_entry), 
+        
         MessageHandler(filters.COMMAND, cancel_rename_brand)
         ],
     per_user=True,

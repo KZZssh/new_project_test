@@ -26,7 +26,7 @@ from admin_handlers_newupdate import (
     get_new_size_name, get_new_color_name, get_variant_price, get_variant_quantity,
      update_order_status_admin, order_history_handler, order_filter_handler,
     cancel_from_history_handler, confirm_cancel_from_history, back_to_order_history,
-    pagination_handler
+    pagination_handler , cleanup_handler
 )
 from client_handlers_org import (
     start_handler, catalog_handler, reply_cart_handler, subcategories_handler, brands_handler,
@@ -61,6 +61,7 @@ async def main() -> None:
     # === ГРУППА -1: ОТЛАДКА (Ловит всё, но не мешает) ===
     # Этот хендлер просто логгирует ВСЕ нажатия на кнопки. Очень полезно для дебага.
     # block=False означает, что после него обработка пойдет дальше.
+    application.add_handler(MessageHandler(filters.COMMAND, cleanup_handler), group=-1)
     application.add_handler(
         CallbackQueryHandler(debug_all_callback, pattern=".*", block=False), 
         group=-1
