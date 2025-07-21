@@ -1689,17 +1689,7 @@ async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TY
     await manage_subcategories(update, context)
     return ConversationHandler.END
 
-async def switch_to_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Эта функция используется в fallbacks других диалогов.
-    Она корректно завершает текущий диалог и СРАЗУ ЖЕ запускает админ-панель.
-    """
-    logging.info("Переключение на админ-панель из другого диалога...")
-    
-    # Просто вызываем entry_point для админ-панели.
-    # Библиотека сама поймет, что нужно завершить старый диалог и начать новый.
-    # Убедись, что 'admin_menu_entry' - это ПРАВИЛЬНОЕ имя твоей функции.
-    return await admin_menu_entry(update, context)
+
 
 # =================================================================
 # === СОЗДАНИЕ HANDLERS ===
@@ -1728,7 +1718,7 @@ add_product_conv = ConversationHandler(
         ],
         ADD_ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")]
     },
-    fallbacks=[CommandHandler("admin", switch_to_admin_panel),
+    fallbacks=[CommandHandler("admin", admin_menu_entry),
         MessageHandler(filters.COMMAND, cancel_dialog)
         ],
     per_user=True,
@@ -1789,7 +1779,8 @@ admin_conv = ConversationHandler(
     fallbacks=[
         MessageHandler(filters.COMMAND, cancel_dialog)
               ],
-    persistent=True, name="admin_panel_conversation"
+    persistent=True, name="admin_panel_conversation",
+    allow_reentry=True
 )
 
 
@@ -1800,7 +1791,7 @@ subcat_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_subcat),
         ],
     },
-    fallbacks=[CommandHandler("admin", switch_to_admin_panel),
+    fallbacks=[CommandHandler("admin", admin_menu_entry),
         MessageHandler(filters.COMMAND, cancel_rename_subcat)
         ],
     per_user=True,
@@ -1814,7 +1805,7 @@ brand_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_brand),
         ],
     },
-    fallbacks=[CommandHandler("admin", switch_to_admin_panel),
+    fallbacks=[CommandHandler("admin", admin_menu_entry),
         MessageHandler(filters.COMMAND, cancel_rename_brand)
         ],
     per_user=True,
