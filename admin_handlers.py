@@ -578,22 +578,34 @@ async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEF
     data = query.data
 
     if data == "back_to_edit_menu":
+        # Суреті бар хабарламаны өшіреміз, себебі show_edit_menu текст жібереді
+        await query.message.delete() 
         await show_edit_menu(update, context)
         return EDIT_AWAIT_ACTION
 
     field_to_edit = data.split('_')[2] # edit_field_price -> price
     context.user_data['field_to_edit'] = field_to_edit
-    
+
+    prompt = ""
+    next_state = EDIT_GET_NEW_VARIANT_VALUE
+
     if field_to_edit == "photo":
-        # Для редактирования фото мы можем переиспользовать логику добавления
-        context.user_data['current_variant_id'] = context.user_data.get('variant_to_edit_id')
-        context.user_data['media_order'] = 0
-        await query.edit_message_text("Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done.")
-        return EDIT_ADD_VARIANT_MEDIA 
-        
-    prompt = f"Введите новое значение для поля '{field_to_edit}':"
-    await query.edit_message_text(prompt)
-    return EDIT_GET_NEW_VARIANT_VALUE
+        prompt = "Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done."
+        next_state = EDIT_ADD_VARIANT_MEDIA 
+    else:
+        prompt = f"Введите новое значение для поля '{field_to_edit}':"
+
+    # Суреті бар ескі хабарламаны өшіреміз
+    await query.message.delete()
+    # Орнына жаңа, тексттік хабарлама жібереміз
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=prompt
+    )
+
+    return next_state
+
+
 
 async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     field = context.user_data.get('field_to_edit')
@@ -1722,7 +1734,13 @@ async def handle_edit_photo_nav(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Вариант туралы ақпаратты қайта аламыз (caption жаңарту үшін)
     variant_id = context.user_data.get('variant_to_edit_id')
-    variant_details = await fetchone("...", (variant_id,)) # ... орнына өз запросыңды қой
+    variant_details = await fetchone("""
+        SELECT pv.price, pv.quantity, s.name as size_name, c.name as color_name
+        FROM product_variants pv
+        LEFT JOIN sizes s ON pv.size_id = s.id
+        LEFT JOIN colors c ON pv.color_id = c.id
+        WHERE pv.id = ?
+    """, (variant_id,))
 
     # Caption-ды жаңартамыз
     caption = (
