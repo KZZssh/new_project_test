@@ -284,7 +284,7 @@ async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await update.message.reply_text(
         f"✅ Основной товар '{data['product_name']}' создан.\n"
-        f"Его уникальный артикул: <pre>{sku}</pre>\n\n"
+        f"Его уникальный артикул: <pre><code>{sku}</code></pre>\n\n"
         f"Теперь добавим первый вариант.",
         parse_mode='HTML'
     )
