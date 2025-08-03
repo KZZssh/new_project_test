@@ -334,8 +334,8 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
     caption = (
         f"*{md2(product['name'])}*\n"
         f"{md2('Бренд')}: {md2(product['brand'])}\n"
-        f"{md2('Цена')}: {md2(product['min_price'])}₸\n"
-        f"{md2('код товара')}: ```{md2(product['sku'])}```\n\n"
+        f"{md2('Цена')}: {md2(product['min_price'])}₸\n\n"
+        f"{md2('артикул товара')}: `{md2(product['sku'])}`\n\n"
         f"_{md2('Страница')} {md2(page + 1)}/{md2(total)}_"
     )
 

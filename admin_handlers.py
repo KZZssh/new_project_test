@@ -1635,7 +1635,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Эти команды переводят диалог в новое состояние
     elif data == "admin_edit_product":
             context.user_data["mode"] = "edit"
-            await query.edit_message_text("Введите ID товара для редактирования:")
+            await query.edit_message_text("Введите артикул(код) товара для редактирования:")
             return ADMIN_AWAIT_EDIT_ID
             
     elif data == "admin_manage_subcategories":
