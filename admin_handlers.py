@@ -578,7 +578,6 @@ async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEF
     data = query.data
 
     if data == "back_to_edit_menu":
-        # Суреті бар хабарламаны өшіреміз, себебі show_edit_menu текст жібереді
         await query.message.delete() 
         await show_edit_menu(update, context)
         return EDIT_AWAIT_ACTION
@@ -590,14 +589,18 @@ async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEF
     next_state = EDIT_GET_NEW_VARIANT_VALUE
 
     if field_to_edit == "photo":
+        # --- ТҮЗЕТІЛГЕН ЖЕР ---
+        # Фото қосу процесін бастамас бұрын, қажетті деректерді дайындаймыз
+        context.user_data['current_variant_id'] = context.user_data.get('variant_to_edit_id')
+        context.user_data['media_order'] = 0 # KeyError болдырмау үшін санауышты бастаймыз
+        # --- ТҮЗЕТУДІҢ СОҢЫ ---
+
         prompt = "Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done."
         next_state = EDIT_ADD_VARIANT_MEDIA 
     else:
         prompt = f"Введите новое значение для поля '{field_to_edit}':"
 
-    # Суреті бар ескі хабарламаны өшіреміз
     await query.message.delete()
-    # Орнына жаңа, тексттік хабарлама жібереміз
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text=prompt
@@ -1681,7 +1684,12 @@ async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает главное меню редактирования с вариантами."""
     product_id = context.user_data.get('product_to_edit_id')
-    product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
+    product = await fetchone("""
+    SELECT p.*, b.name as brand_name 
+    FROM products p 
+    JOIN brands b ON p.brand_id = b.id 
+    WHERE p.id = ?
+""", (product_id,))
     
     variants = await fetchall("""
         SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
@@ -1691,7 +1699,7 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE pv.product_id = ?
     """, (product_id,))
 
-    message_text = f"⚙️ Редактирование <b>{product['name']}</b> (ID: {product_id})\n\nВыберите действие:"
+    message_text = f"⚙️ Редактирование <b>{product['name']}</b> \nБренд:{product['brand_name']}\n(Артикул: {product['sku']})\n\nВыберите действие:"
     keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
     if variants:
         keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
