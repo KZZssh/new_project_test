@@ -572,42 +572,43 @@ async def confirm_full_product_delete(update: Update, context: ContextTypes.DEFA
         await show_edit_menu(update, context)
         return EDIT_AWAIT_ACTION
 
+
+
 async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     data = query.data
 
     if data == "back_to_edit_menu":
+        # Суреті бар хабарламаны өшіреміз
         await query.message.delete() 
-        await show_edit_menu(update, context)
+        # Сосын негізгі редакциялау менюін ЖАҢА ХАБАРЛАМАМЕН жібереміз
+        await show_edit_menu(update, context, send_new=True)
         return EDIT_AWAIT_ACTION
 
-    field_to_edit = data.split('_')[2] # edit_field_price -> price
+    field_to_edit = data.split('_')[2]
     context.user_data['field_to_edit'] = field_to_edit
 
     prompt = ""
     next_state = EDIT_GET_NEW_VARIANT_VALUE
 
     if field_to_edit == "photo":
-        # --- ТҮЗЕТІЛГЕН ЖЕР ---
-        # Фото қосу процесін бастамас бұрын, қажетті деректерді дайындаймыз
         context.user_data['current_variant_id'] = context.user_data.get('variant_to_edit_id')
-        context.user_data['media_order'] = 0 # KeyError болдырмау үшін санауышты бастаймыз
-        # --- ТҮЗЕТУДІҢ СОҢЫ ---
-
+        context.user_data['media_order'] = 0
         prompt = "Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done."
         next_state = EDIT_ADD_VARIANT_MEDIA 
     else:
         prompt = f"Введите новое значение для поля '{field_to_edit}':"
 
+    # Суреті бар ескі хабарламаны өшіреміз
     await query.message.delete()
+    # Орнына жаңа, тексттік хабарлама жібереміз
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text=prompt
     )
 
     return next_state
-
 
 
 async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1681,16 +1682,23 @@ async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE
     return EDIT_AWAIT_ACTION
 
 
-async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send_new=False):
     """Показывает главное меню редактирования с вариантами."""
     product_id = context.user_data.get('product_to_edit_id')
+
     product = await fetchone("""
-    SELECT p.*, b.name as brand_name 
-    FROM products p 
-    JOIN brands b ON p.brand_id = b.id 
-    WHERE p.id = ?
-""", (product_id,))
-    
+        SELECT p.*, b.name as brand_name 
+        FROM products p 
+        JOIN brands b ON p.brand_id = b.id 
+        WHERE p.id = ?
+    """, (product_id,))
+
+    if not product:
+        # Егер тауар табылмаса, қате туралы хабарлаймыз
+        chat_id = update.effective_chat.id
+        await context.bot.send_message(chat_id, "❌ Ошибка: не удалось найти товар для редактирования.")
+        return EDIT_AWAIT_ACTION 
+
     variants = await fetchall("""
         SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
         FROM product_variants pv
@@ -1699,7 +1707,8 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE pv.product_id = ?
     """, (product_id,))
 
-    message_text = f"⚙️ Редактирование <b>{product['name']}</b> \nБренд:{product['brand_name']}\n(Артикул: {product['sku']})\n\nВыберите действие:"
+    message_text = f"⚙️ Редактирование <b>{product['name']}</b>\nБренд: {product['brand_name']}\n(Артикул: {product['sku']})\n\nВыберите действие:"
+
     keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
     if variants:
         keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
@@ -1713,10 +1722,31 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("❌ Удалить товар ПОЛНОСТЬЮ", callback_data=f"delete_product_full_{product_id}")])
     keyboard.append([InlineKeyboardButton("⬅️ Назад в админ-меню", callback_data="back_to_admin_menu")])
 
-    if update.callback_query:
-        await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Егер send_new=True болса (яғни, "Назад" кнопкасынан келсе), жаңа хабарлама жібереміз
+    if send_new:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=message_text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML
+        )
+    # Басқа жағдайда, ескісін өзгертеміз
     else:
-        await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+        query = update.callback_query
+        if query and query.message:
+             await query.edit_message_text(
+                 text=message_text, 
+                 reply_markup=reply_markup, 
+                 parse_mode=ParseMode.HTML
+             )
+        elif update.message:
+             await update.message.reply_text(
+                 text=message_text, 
+                 reply_markup=reply_markup, 
+                 parse_mode=ParseMode.HTML
+             )
 
 
 
