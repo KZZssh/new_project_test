@@ -276,7 +276,7 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Получение товаров
     if all_mode:
         products = await fetchall("""
-            SELECT p.id, p.name, MIN(pv.price) as min_price, b.name as brand
+            SELECT p.id, p.name,p.sku, MIN(pv.price) as min_price, b.name as brand
             FROM products p
             JOIN product_variants pv ON p.id = pv.product_id
             JOIN brands b ON p.brand_id = b.id
@@ -289,7 +289,7 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
             await safe_delete_and_send(query, "Ошибка: не определён бренд.", context)
             return
         products = await fetchall("""
-            SELECT p.id, p.name, MIN(pv.price) as min_price, b.name as brand
+            SELECT p.id, p.name,p.sku, MIN(pv.price) as min_price, b.name as brand
             FROM products p
             JOIN product_variants pv ON p.id = pv.product_id
             JOIN brands b ON p.brand_id = b.id
@@ -335,6 +335,7 @@ async def show_product_slider(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"*{md2(product['name'])}*\n"
         f"{md2('Бренд')}: {md2(product['brand'])}\n"
         f"{md2('Цена')}: {md2(product['min_price'])}₸\n"
+        f"{md2('код товара')}: ```{md2(product['sku'])}```\n\n"
         f"_{md2('Страница')} {md2(page + 1)}/{md2(total)}_"
     )
 

@@ -17,7 +17,7 @@ from starlette.routing import Route
 
 # --- Сіздің импорттарыңыз ---
 from configs import BOT_TOKEN
-from admin_handlers_newupdate import (
+from admin_handlers import (
      add_product_conv , finish_media,
      report_handler, admin_decision_handler, cancel_dialog, cat_manage_handler,
     subcat_manage_handler, subcat_rename_conv, brand_manage_handler, brand_rename_conv,

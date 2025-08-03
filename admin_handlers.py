@@ -1,42 +1,78 @@
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup , CallbackQuery 
-from telegram.ext import (
-    CommandHandler,
-    ContextTypes,
-    ConversationHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-)
-
+import logging
 import os
 import aiohttp
-from configs import FLASK_UPLOAD_URL
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup , CallbackQuery
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from telegram.constants import ParseMode
-import logging
 import asyncio
-import re
-import telegram.error
-from telegram.helpers import escape_markdown
-from configs import ADMIN_IDS
+from configs import ADMIN_IDS, FLASK_UPLOAD_URL
 from db import fetchall, fetchone, execute
-import logging
-logging.basicConfig(level=logging.DEBUG)
+import pytz
+from datetime import datetime
+from functools import wraps
+import random
+import string
 
 
-(
-    GET_NAME, GET_CATEGORY, GET_SUBCATEGORY, GET_BRAND, GET_DESCRIPTION,
-    GET_NEW_CATEGORY_NAME, GET_NEW_SUBCATEGORY_NAME, GET_NEW_BRAND_NAME,
-    GET_NEW_SIZE_NAME, GET_NEW_COLOR_NAME,
-    SELECT_VARIANT_SIZE, SELECT_VARIANT_COLOR,
-    GET_VARIANT_PRICE, GET_VARIANT_QUANTITY, GET_VARIANT_PHOTO,
-    ASK_ADD_MORE_VARIANTS,
-    AWAIT_EDIT_ACTION,
-    RETURN_TO_EDIT,
-    CONFIRM_DELETE_VARIANT, CONFIRM_DELETE_FULL_PRODUCT,
-    SELECT_VARIANT_FIELD, GET_NEW_VARIANT_VALUE,
-    SELECT_GENERAL_FIELD, GET_NEW_GENERAL_VALUE
-) = range(24)
+
+
+async def generate_unique_sku(length=4):
+    """Уникалды 4-сандық артикул генерациялайды."""
+    while True:
+        sku = ''.join(random.choices(string.digits, k=length))
+        existing_sku = await fetchone("SELECT sku FROM products WHERE sku = ?", (sku,))
+        if not existing_sku:
+            return sku
+
+
+def cleanup_before_entry(func):
+    """
+    Декоратор-экзорцист. Кез келген диалогты бастамас бұрын,
+    алдымен ескі, "қатып қалған" диалогты МОЛЧА және ҚАУІПСІЗ жояды.
+    """
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        
+        # `user_data`-дан диалогтың күйін тауып, жоямыз
+        for key in list(context.user_data.keys()):
+            if isinstance(key, tuple) and key[1] == 'conversation_state':
+                logging.warning(f"Тазалаушы: {user_id} үшін қатып қалған диалог табылып, жойылды.")
+                del context.user_data[key]
+                # ConversationHandler-ді тоқтатудың қажеті жоқ, тек күйді тазаласақ жеткілікті.
+
+        # Тазалап болған соң, негізгі функцияны іске қосамыз
+        return await func(update, context, *args, **kwargs)
+        
+    return wrapper
+
+def convert_to_local_time(utc_str):
+    """Конвертирует строку с датой UTC в локальное время Астаны (GMT+5)."""
+    if not utc_str:
+        return "неизвестно"
+    try:
+        # Указываем часовой пояс Казахстана
+        local_tz = pytz.timezone('Asia/Almaty')
+        
+        # Преобразуем строку из формата ISO в объект datetime
+        # (с учетом того, что Python до 3.11 может не понимать 'Z' или '+00:00' напрямую)
+        if utc_str.endswith('+00:00'):
+            utc_str = utc_str[:-6]
+        
+        utc_dt = datetime.fromisoformat(utc_str).replace(tzinfo=pytz.utc)
+        
+        # Конвертируем в локальное время
+        local_dt = utc_dt.astimezone(local_tz)
+        
+        # Возвращаем в красивом формате "день.месяц.год часы:минуты"
+        return local_dt.strftime('%d.%m.%Y %H:%M')
+    except Exception as e:
+        # Если что-то пошло не так, вернем как есть, чтобы не сломать бота
+        print(f"Ошибка конвертации времени: {e}") # Для отладки
+        return utc_str
+    
+
 
 def get_effective_message(update):
     # Вернёт message для обычного сообщения или callback_query.message для кнопки
@@ -45,418 +81,353 @@ def get_effective_message(update):
     elif getattr(update, "callback_query", None):
         return update.callback_query.message
     return None
+# --- СОСТОЯНИЯ FSM (Finite State Machine) ---
 
+# Определяем уникальные, пронумерованные шаги для всего диалога
+(
+    # === Состояния для ДОБАВЛЕНИЯ товара ===
+    ADD_GET_NAME, ADD_GET_CATEGORY, ADD_GET_SUBCATEGORY, ADD_GET_BRAND, ADD_GET_DESCRIPTION,
+    ADD_GET_NEW_CATEGORY_NAME, ADD_GET_NEW_SUBCATEGORY_NAME, ADD_GET_NEW_BRAND_NAME,
+    ADD_GET_VARIANT_SIZE, ADD_GET_VARIANT_COLOR, ADD_GET_VARIANT_PRICE, ADD_GET_VARIANT_QUANTITY, ADD_GET_VARIANT_MEDIA,
+    ADD_GET_NEW_SIZE_NAME, ADD_GET_NEW_COLOR_NAME,
+    ADD_ASK_ADD_MORE_VARIANTS,
 
+    # === Состояния для ЕДИНОГО АДМИНСКОГО ХЕНДЛЕРА ===
+    ADMIN_MENU_AWAIT,           # Ожидание выбора в главном админ-меню
+    ADMIN_AWAIT_EDIT_ID,        # Ожидание ввода ID товара для редактирования
+    ADMIN_AWAIT_SUBCAT_ID,     # Ожидание ввода ID категории для подкатегорий
+    
+    # === Состояния для РЕДАКТИРОВАНИЯ товара ===
+    EDIT_AWAIT_ACTION, 
+    EDIT_CONFIRM_DELETE_VARIANT, EDIT_CONFIRM_DELETE_FULL_PRODUCT,
+    EDIT_SELECT_VARIANT_FIELD, EDIT_GET_NEW_VARIANT_VALUE,
+    EDIT_ADD_VARIANT_SIZE, EDIT_ADD_VARIANT_COLOR, EDIT_ADD_VARIANT_PRICE, EDIT_ADD_VARIANT_QUANTITY, EDIT_ADD_VARIANT_MEDIA,
+    EDIT_GET_NEW_SIZE_NAME, EDIT_GET_NEW_COLOR_NAME,
+    EDIT_ASK_ADD_MORE,
 
+    
+    
+    # === Состояния для переименования (остаются как есть) ===
+    RENAME_SUBCAT, RENAME_BRAND
+
+) = range(500, 534)
+
+# --- Вспомогательные функции (без изменений) ---
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
-async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
-    logging.warning(f"FSM CANCELLED. Callback: {getattr(update.callback_query, 'data', None)}; Message: {getattr(update.message, 'text', None)}; State: {context.user_data.get('state')}")
-    
+async def cleanup_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Бұл "тазалаушы" басқаларынан бұрын жұмыс істейді. Ол жаңа диалогты
+    бастайтын команда келгенде, ескі "қатып қалған" диалогты тауып, үнсіз жояды.
+    Бұл функция update-ті тоқтатпайды, тек тазалап, әрі қарай жібереді.
+    """
+    # Егер бұл команда болмаса, ештеңе істемейміз
+    if not (update.message and update.message.text and update.message.text.startswith('/')):
+        return
 
-    context.user_data.clear()
-    message = ("Действие отменено.")
-    if update.callback_query:
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=message, parse_mode=ParseMode.HTML)
-    else:
-        await update.message.reply_text(message, parse_mode=ParseMode.HTML)
+    command = update.message.text
+    # Тазалауды қажет ететін негізгі командалар
+    reset_commands = ['/admin', '/start', '/cancel'] 
+    
+    if command in reset_commands:
+        user_id = update.effective_user.id
+        # `user_data`-дан диалогтың күйін тауып, жоямыз
+        for key in list(context.user_data.keys()):
+            if isinstance(key, tuple) and key[1] == 'conversation_state':
+                logging.warning(f"Тазалаушы: {user_id} үшін қатып қалған диалог табылып, жойылды ('{command}' командасының алдында).")
+                del context.user_data[key]
+                break # Бір ғана күй болуы керек
+
+
+
+async def cancel_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Простая и надежная отмена. Завершает диалог и сообщает об этом."""
+    if update.message and update.message.text == '/cancel':
+        await update.message.reply_text("Действие отменено.")
     return ConversationHandler.END
 
-async def create_new_entity(update, context, table_name, name, **kwargs):
+async def create_new_entity(name: str, table_name: str, category_id: int = None) -> int:
+    """Создает новую сущность (категорию, бренд и т.д.)."""
     params = (name,)
     query = f"INSERT INTO {table_name} (name) VALUES (?)"
-    if table_name == 'sub_categories':
-        params = (name, kwargs['category_id'])
+    if table_name == 'sub_categories' and category_id:
+        params = (name, category_id)
         query = "INSERT INTO sub_categories (name, category_id) VALUES (?, ?)"
+    
     try:
         await execute(query, params)
-        entity_row = await fetchone(f"SELECT id FROM {table_name} WHERE name = ? {'AND category_id = ?' if table_name == 'sub_categories' else ''}", params)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=(f"Сущность '{name}' успешно создана."), parse_mode=ParseMode.HTML)
+        entity_row = await fetchone(f"SELECT id FROM {table_name} WHERE name = ? {'AND category_id = ?' if category_id else ''}", params)
         return entity_row['id']
-    except Exception:
-        entity_row = await fetchone(f"SELECT id FROM {table_name} WHERE name = ? {'AND category_id = ?' if table_name == 'sub_categories' else ''}", params)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=(f"Сущность '{name}' уже существует. Выбираю существующую."), parse_mode=ParseMode.HTML)
+    except Exception: # Если сущность с таким именем уже существует
+        entity_row = await fetchone(f"SELECT id FROM {table_name} WHERE name = ? {'AND category_id = ?' if category_id else ''}", params)
         return entity_row['id']
-        
 
-# --- Добавление товара ---
-async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("Нет доступа.", parse_mode=ParseMode.HTML)
-        return
-    context.user_data.clear()
-    context.user_data["state"] = "get_product_name"
-    context.user_data["product_addition_finished"] = False
+# =================================================================
+# === ПРОЦЕСС ДОБАВЛЕНИЯ ТОВАРА (ЕДИНЫЙ CONVERSATIONHANDLER) ===
+# =================================================================
+
+# 1. Начало (Entry Point)
+@cleanup_before_entry
+async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Начинает диалог добавления товара."""
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("Добавляем новый товар. Введите его общее название.\n\n/cancel для отмены.", parse_mode=ParseMode.HTML)
-    return
+    context.user_data.clear() # Очищаем старые данные
+    await query.edit_message_text("Добавляем новый товар. Введите его общее название.\n\n/cancel - отмена.")
+    return ADD_GET_NAME
 
-async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("DEBUG: get_name called")
-    print("Text received:", update.message.text)
-
-    product_name = update.message.text.strip()
-    if not product_name:
-        await update.message.reply_text("Название не может быть пустым. Попробуйте ещё раз.")
-        return
-    
-    context.user_data['new_product_name'] = product_name
-    context.user_data["state"] = "choose_category"
-    print("DEBUG: state changed to choose_category")
-
+# 2. Получение названия
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data['product_name'] = update.message.text.strip()
     categories = await fetchall("SELECT * FROM categories")
-    keyboard = [[InlineKeyboardButton(cat['name'], callback_data=f"add_cat_{cat['id']}")] for cat in categories]
-    keyboard.append([InlineKeyboardButton("➕ Создать категорию", callback_data="add_cat_new")])
+    keyboard = [[InlineKeyboardButton(cat['name'], callback_data=f"cat_{cat['id']}")] for cat in categories]
+    keyboard.append([InlineKeyboardButton("➕ Новая категория", callback_data="cat_new")])
+    await update.message.reply_text("Шаг 1: Выберите основную категорию:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return ADD_GET_CATEGORY
 
-    await update.message.reply_text(
-        ("Шаг 1: Выберите основную категорию:"),
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=ParseMode.HTML
-    )
-
-
-async def get_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "choose_category"
+# 3. Получение категории
+async def get_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    if query.data == "add_cat_new":
-        context.user_data["state"] = "get_new_category_name"
-        await query.edit_message_text("Введите название новой основной категории:", parse_mode=ParseMode.HTML)
-        return
-    parts = query.data.split('_')
-    if len(parts) == 3 and parts[2].isdigit():
-        context.user_data['new_product_category_id'] = int(parts[2])
-        context.user_data["state"] = "choose_subcategory"
-        await ask_for_subcategory(update, context)
-        return   
-    else:
-        await query.answer("Ошибка формата категории.", show_alert=True)
-        return 
-
-async def get_new_category_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    category_id = await create_new_entity(update, context, 'categories', update.message.text)
-    context.user_data['new_product_category_id'] = category_id
-    context.user_data["state"] = "choose_subcategory"
+    if query.data == "cat_new":
+        await query.edit_message_text("Введите название новой категории:")
+        return ADD_GET_NEW_CATEGORY_NAME
+    context.user_data['category_id'] = int(query.data.split('_')[1])
     await ask_for_subcategory(update, context)
+    return ADD_GET_SUBCATEGORY
 
-async def ask_for_subcategory(update, context):
-    context.user_data["state"] = "choose_subcategory"
-    category_id = context.user_data.get('new_product_category_id')
+async def get_new_category_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    category_id = await create_new_entity(update.message.text, 'categories')
+    context.user_data['category_id'] = category_id
+    await update.message.reply_text(f"Категория '{update.message.text}' создана.")
+    await ask_for_subcategory(update, context)
+    return ADD_GET_SUBCATEGORY
+
+# 4. Запрос подкатегории (вспомогательная функция)
+async def ask_for_subcategory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    category_id = context.user_data.get('category_id')
     sub_categories = await fetchall("SELECT * FROM sub_categories WHERE category_id = ?", (category_id,))
-    keyboard = [[InlineKeyboardButton(scat['name'], callback_data=f"add_subcat_{scat['id']}")] for scat in sub_categories]
-    keyboard.append([InlineKeyboardButton("➕ Создать подкатегорию", callback_data="add_subcat_new")])
-    message_text = ("Шаг 2: Выберите подкатегорию:")
-    if not category_id:
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("❌ Ошибка: категория не выбрана. Вернитесь на шаг выбора категории.")
-        return
-    if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    keyboard = [[InlineKeyboardButton(scat['name'], callback_data=f"subcat_{scat['id']}")] for scat in sub_categories]
+    keyboard.append([InlineKeyboardButton("➕ Новая подкатегория", callback_data="subcat_new")])
+    message_text = "Шаг 2: Выберите подкатегорию:"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text(
-                text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
-            )
-    return
+        await update.message.reply_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def get_subcategory(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "choose_subcategory"
+# 5. Получение подкатегории
+async def get_subcategory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    if query.data == "add_subcat_new":
-        context.user_data["state"] = "get_new_subcategory_name"
-        await query.edit_message_text("Введите название новой подкатегории:", parse_mode=ParseMode.HTML)
-        return 
-    parts = query.data.split('_')
-    if len(parts) == 3 and parts[2].isdigit():
-        context.user_data['new_product_sub_category_id'] = int(parts[2])
-        context.user_data["state"] = "choose_brand"
-        await ask_for_brand(update, context)
-    else:
-        await query.answer("Ошибка формата подкатегории.", show_alert=True)
-        return
-
-async def get_new_subcategory_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "get_new_subcategory_name"
-
-    category_id = context.user_data.get("new_product_category_id")
-    if not category_id:
-        await update.message.reply_text("❌ Ошибка: категория не выбрана. Пожалуйста, сначала выберите основную категорию.")
-        return
-
-    subcat_id = await create_new_entity(update, context, 'sub_categories', update.message.text, category_id=category_id)
-    context.user_data['new_product_sub_category_id'] = subcat_id
-    context.user_data["state"] = "choose_brand"
+    if query.data == "subcat_new":
+        await query.edit_message_text("Введите название новой подкатегории:")
+        return ADD_GET_NEW_SUBCATEGORY_NAME
+    context.user_data['sub_category_id'] = int(query.data.split('_')[1])
     await ask_for_brand(update, context)
+    return ADD_GET_BRAND
 
+async def get_new_subcategory_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    category_id = context.user_data.get('category_id')
+    subcat_id = await create_new_entity(update.message.text, 'sub_categories', category_id=category_id)
+    context.user_data['sub_category_id'] = subcat_id
+    await update.message.reply_text(f"Подкатегория '{update.message.text}' создана.")
+    await ask_for_brand(update, context)
+    return ADD_GET_BRAND
 
-async def ask_for_brand(update, context):
-    context.user_data["state"] = "choose_brand"
+# 6. Запрос бренда (вспомогательная функция)
+async def ask_for_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     brands = await fetchall("SELECT * FROM brands")
-    keyboard = [[InlineKeyboardButton(b['name'], callback_data=f"add_brand_{b['id']}")] for b in brands]
-    keyboard.append([InlineKeyboardButton("➕ Создать новый бренд", callback_data="add_brand_new")])
-    message_text = ("Шаг 3: Выберите бренд:")
-    if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    keyboard = [[InlineKeyboardButton(b['name'], callback_data=f"brand_{b['id']}")] for b in brands]
+    keyboard.append([InlineKeyboardButton("➕ Новый бренд", callback_data="brand_new")])
+    message_text = "Шаг 3: Выберите бренд:"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    return
+        await update.message.reply_text(text=message_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-
-# === Часть 2: Бренд, описание, варианты, добавление, исправления по кнопкам/состояниям ===
-
-async def get_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "choose_brand"
+# 7. Получение бренда
+async def get_brand(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    if query.data == "add_brand_new":
-        context.user_data["state"] = "get_new_brand_name"
-        await query.edit_message_text("Введите название нового бренда:", parse_mode=ParseMode.HTML)
-        return
-    parts = query.data.split('_')
-    if len(parts) == 3 and parts[2].isdigit():
-        context.user_data['new_product_brand_id'] = int(parts[2])
-        # Только если все нужные ключи уже есть
-        required_keys = ['new_product_name', 'new_product_category_id', 'new_product_sub_category_id']
-        missing = [k for k in required_keys if k not in context.user_data]
-        if missing:
-            await query.edit_message_text(f"⚠️ Не хватает данных: {', '.join(missing)}. Вернитесь назад.")
-            return
+    if query.data == "brand_new":
+        await query.edit_message_text("Введите название нового бренда:")
+        return ADD_GET_NEW_BRAND_NAME
+    context.user_data['brand_id'] = int(query.data.split('_')[1])
+    await query.edit_message_text("Шаг 4: Введите общее описание товара:")
+    return ADD_GET_DESCRIPTION
 
-        context.user_data["state"] = "get_description"
-        await query.edit_message_text("Бренд выбран. Шаг 4: Введите общее описание товара.", parse_mode=ParseMode.HTML)
+async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    brand_id = await create_new_entity(update.message.text, 'brands')
+    context.user_data['brand_id'] = brand_id
+    await update.message.reply_text(f"Бренд '{update.message.text}' создан.\n\nШаг 4: Введите общее описание товара.")
+    return ADD_GET_DESCRIPTION
 
-    
-
-async def get_new_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "get_new_brand_name"
-    brand_id = await create_new_entity(update, context, 'brands', update.message.text)
-    context.user_data['new_product_brand_id'] = brand_id
-    msg = get_effective_message(update)
-    if msg:
-        context.user_data["state"] = "get_description"
-        await msg.reply_text("Бренд создан/выбран. Шаг 4: Введите общее описание товара.", parse_mode=ParseMode.HTML)
-    return
-
-    
-
-async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("DEBUG user_data before get_description:", context.user_data)
-    context.user_data["state"] = "get_description"
-    print("📦 context.user_data:", context.user_data)
-
+# 8. Получение описания и сохранение основного товара
+async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data['description'] = update.message.text
     data = context.user_data
-
-    required_keys = [
-        'new_product_name',
-        'new_product_category_id',
-        'new_product_sub_category_id',
-        'new_product_brand_id'
-    ]
-
-    missing = [key for key in required_keys if key not in data]
-    if missing:
-        await update.message.reply_text(f"❌ Отсутствуют данные: {', '.join(missing)}. Заполните все шаги.")
-        return
-
+    # Сохраняем основной товар в БД
     await execute(
         "INSERT INTO products (name, description, category_id, sub_category_id, brand_id) VALUES (?, ?, ?, ?, ?)",
-        (data['new_product_name'], update.message.text, data['new_product_category_id'], data['new_product_sub_category_id'], data['new_product_brand_id'])
+        (data['product_name'], data['description'], data['category_id'], data['sub_category_id'], data['brand_id'])
     )
-    product_row = await fetchone("SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1", (data['new_product_name'],))
-    context.user_data['current_product_id'] = product_row['id']
-    msg = get_effective_message(update)
-    if msg:
-        await msg.reply_text(f"✅ Основная карточка товара '{data['new_product_name']}' создана.\n\nТеперь добавим первый вариант.", parse_mode=ParseMode.HTML)
-    context.user_data["state"] = "choose_variant_size"
+    product_row = await fetchone("SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1", (data['product_name'],))
+    context.user_data['product_id'] = product_row['id']
+
+    # 3. Уникалды артикул генерациялаймыз
+    sku = await generate_unique_sku()
+
+    # 4. Базаны жаңартып, артикулды сақтаймыз
+    await execute("UPDATE products SET sku = ? WHERE id = ?", (sku, product_row['id']))
+
+    await update.message.reply_text(
+        f"✅ Основной товар '{data['product_name']}' создан.\n"
+        f"Его уникальный артикул: <pre>{sku}</pre>\n\n"
+        f"Теперь добавим первый вариант.",
+        parse_mode='HTML'
+    )
+
     await ask_for_variant_size(update, context)
+    return ADD_GET_VARIANT_SIZE
 
-# --- Варианты товара ---
-async def ask_for_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "choose_variant_size"
+# --- Функции для добавления вариантов ---
+async def ask_for_variant_size(update, context):
     sizes = await fetchall("SELECT * FROM sizes")
-    print("ask_for_variant_size sizes:", sizes, flush=True)
-    keyboard = [[InlineKeyboardButton(s['name'], callback_data=f"add_size_{s['id']}")] for s in sizes]
-    keyboard.append([InlineKeyboardButton("➕ Создать новый размер", callback_data="add_size_new")])
-    msg = ("Добавление варианта. Шаг 1: Выберите размер:")
-    if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    keyboard = [[InlineKeyboardButton(s['name'], callback_data=f"size_{s['id']}")] for s in sizes]
+    keyboard.append([InlineKeyboardButton("➕ Новый размер", callback_data="size_new")])
+    msg = "Добавление варианта. Шаг 1: Выберите размер:"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        msg_obj = get_effective_message(update)
-        if msg_obj:
-            await msg_obj.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    return
+        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def select_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "choose_variant_size"
-    print("select_variant_size called", flush=True)
+async def get_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    print("callback_query data:", query.data, flush=True)
-    if query.data == "add_size_new":
-        context.user_data["state"] = "get_new_size_name"
-        await query.edit_message_text("Введите новое значение размера:", parse_mode=ParseMode.HTML)
-        return
-    parts = query.data.split('_')
-    if len(parts) == 3 and parts[2].isdigit():
-        context.user_data['current_variant_size_id'] = int(parts[2])
-        context.user_data["state"] = "choose_variant_color"
-        await ask_for_variant_color(update, context)
-        return
-    else:
-        await query.answer("Ошибка формата размера.", show_alert=True)
-        return
-
-async def get_new_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "get_new_size_name"
-    size_id = await create_new_entity(update, context, 'sizes', update.message.text)
-    context.user_data['current_variant_size_id'] = size_id
-    context.user_data["state"] = "choose_variant_color"
+    if query.data == "size_new":
+        await query.edit_message_text("Введите новое значение размера:")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_GET_NEW_SIZE_NAME
+        return ADD_GET_NEW_SIZE_NAME
+    context.user_data['variant_size_id'] = int(query.data.split('_')[1])
     await ask_for_variant_color(update, context)
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_COLOR
+    return ADD_GET_VARIANT_COLOR
+
+async def get_new_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    size_id = await create_new_entity(update.message.text, 'sizes')
+    context.user_data['variant_size_id'] = size_id
+    await update.message.reply_text(f"Размер '{update.message.text}' создан.")
+    await ask_for_variant_color(update, context)
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_COLOR
+    return ADD_GET_VARIANT_COLOR
 
 async def ask_for_variant_color(update, context):
-    context.user_data["state"] = "choose_variant_color"
     colors = await fetchall("SELECT * FROM colors")
-    keyboard = [[InlineKeyboardButton(c['name'], callback_data=f"add_color_{c['id']}")] for c in colors]
-    keyboard.append([InlineKeyboardButton("➕ Создать новый цвет", callback_data="add_color_new")])
-    msg = ("Шаг 2: Выберите цвет:")
-    if getattr(update, 'callback_query', None):
-        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    keyboard = [[InlineKeyboardButton(c['name'], callback_data=f"color_{c['id']}")] for c in colors]
+    keyboard.append([InlineKeyboardButton("➕ Новый цвет", callback_data="color_new")])
+    msg = "Шаг 2: Выберите цвет:"
+    if update.callback_query:
+        await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        msg_obj = get_effective_message(update)
-        if msg_obj:
-            await msg_obj.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    return
+        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def select_variant_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "choose_variant_color"
+async def get_variant_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    if query.data == "add_color_new":
-        context.user_data["state"] = "get_new_color_name"
-        await query.edit_message_text("Введите название нового цвета:", parse_mode=ParseMode.HTML)
-        return
-    parts = query.data.split('_')
-    if len(parts) == 3 and parts[2].isdigit():
-        context.user_data['current_variant_color_id'] = int(parts[2])
-        context.user_data["state"] = "get_variant_price"  # <-- ВАЖНО!
-        await query.edit_message_text("Шаг 3: Укажите цену для этого варианта (число):", parse_mode=ParseMode.HTML)
-        return
-    else:
-        await query.answer("Ошибка формата цвета.", show_alert=True)
-        return 
+    if query.data == "color_new":
+        await query.edit_message_text("Введите название нового цвета:")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_GET_NEW_COLOR_NAME
+        else:
+            return ADD_GET_NEW_COLOR_NAME
+    context.user_data['variant_color_id'] = int(query.data.split('_')[1])
+    await query.edit_message_text("Шаг 3: Введите цену этого варианта (только число):")
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_PRICE
+    return ADD_GET_VARIANT_PRICE
 
-async def get_new_color_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "get_new_color_name"
-    color_id = await create_new_entity(update, context, 'colors', update.message.text)
-    context.user_data['current_variant_color_id'] = color_id
-    msg = get_effective_message(update)
-    if msg:
-        await msg.reply_text("Цвет создан/выбран. Шаг 3: Укажите цену.", parse_mode=ParseMode.HTML)
-    context.user_data["state"] = "get_variant_price"
-    
+async def get_new_color_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    color_id = await create_new_entity(update.message.text, 'colors')
+    context.user_data['variant_color_id'] = color_id
+    await update.message.reply_text(f"Цвет '{update.message.text}' создан.\n\nШаг 3: Введите цену этого варианта:")
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_PRICE
+    return ADD_GET_VARIANT_PRICE
 
-async def get_variant_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "get_variant_price"
+async def get_variant_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
-        context.user_data['current_variant_price'] = float(update.message.text)
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Цена установлена. Шаг 4: Укажите количество на складе:", parse_mode=ParseMode.HTML)
-
-        context.user_data["state"] = "get_variant_quantity"
+        context.user_data['variant_price'] = float(update.message.text)
+        await update.message.reply_text("Шаг 4: Введите количество на складе:")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_QUANTITY
+        return ADD_GET_VARIANT_QUANTITY
     except ValueError:
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Неверный формат. Введите цену как число.", parse_mode=ParseMode.HTML)
-        
+        await update.message.reply_text("Неверный формат. Введите цену числом.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_PRICE
+        return ADD_GET_VARIANT_PRICE
 
-async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "get_variant_quantity"
+async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
-        
-        context.user_data['current_variant_quantity'] = int(update.message.text)
-       
-        # Сразу создаём вариант в БД и переводим на этап фото:
-        return await get_variant_photo(update, context)
-    except ValueError:
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Неверный формат. Введите количество как целое число.", parse_mode=ParseMode.HTML)
-
-
-async def get_variant_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "add_variant_photo"
-    # Эта функция вызывается только после ввода количества!
-    data = context.user_data
-    print("DEBUG variant data:",
-      data['current_product_id'],
-      data['current_variant_size_id'],
-      data['current_variant_color_id'],
-      data['current_variant_price'],
-      data['current_variant_quantity'])
-    try:
+        context.user_data['variant_quantity'] = int(update.message.text)
+        data = context.user_data
+        # Сохраняем вариант в БД
         await execute(
-            "INSERT INTO product_variants (product_id, size_id, color_id, price, quantity, photo_id) VALUES (?, ?, ?, ?, ?, NULL)",
-            (data['current_product_id'], data['current_variant_size_id'], data['current_variant_color_id'], data['current_variant_price'], data['current_variant_quantity'])
+            "INSERT INTO product_variants (product_id, size_id, color_id, price, quantity) VALUES (?, ?, ?, ?, ?)",
+            (data['product_id'], data['variant_size_id'], data['variant_color_id'], data['variant_price'], data['variant_quantity'])
         )
         variant_row = await fetchone(
             "SELECT id FROM product_variants WHERE product_id=? AND size_id=? AND color_id=? ORDER BY id DESC LIMIT 1",
-            (data['current_product_id'], data['current_variant_size_id'], data['current_variant_color_id'])
+            (data['product_id'], data['variant_size_id'], data['variant_color_id'])
         )
-        context.user_data['admin_variant_id'] = variant_row['id']
+        context.user_data['current_variant_id'] = variant_row['id']
         context.user_data['media_order'] = 0
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Теперь отправьте от 1 до 5 фото или видео для этого варианта. Когда закончите — напишите /done.")
-        context.user_data["state"] = "add_variant_media"
-        
-    except Exception as e:
-        print(f"Ошибка при добавлении варианта в БД: {e}")
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Ошибка при добавлении варианта в базу данных.", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("Вариант сохранен. Теперь отправьте от 1 до 5 фото/видео для этого варианта. Когда закончите, напишите /done.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_MEDIA
+        else:
+            return ADD_GET_VARIANT_MEDIA
+    except ValueError:
+        await update.message.reply_text("Неверный формат. Введите количество как целое число.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_QUANTITY
+        return ADD_GET_VARIANT_QUANTITY
 
-        
-async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "add_variant_media"
-    variant_id = context.user_data.get('admin_variant_id')
+# ВАША ФУНКЦИЯ add_media БЕЗ ИЗМЕНЕНИЙ
+async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    variant_id = context.user_data.get('current_variant_id')
     order = context.user_data.get('media_order', 0)
 
-    media_count = await fetchone(
-        "SELECT COUNT(*) as cnt FROM product_media WHERE variant_id = ?", (variant_id,)
-    )
-    if media_count and media_count['cnt'] >= 5:
-        msg = get_effective_message(update)
-        await msg.reply_text("Максимум 5 фото/видео для одного варианта. Нажмите /done.")
-        context.user_data["state"] = "finish_variant_media"
-        return await finish_media(update, context)
+    if order >= 5:
+        await update.message.reply_text("Максимум 5 медиафайлов для одного варианта. Напишите /done.")
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_MEDIA
+        return ADD_GET_VARIANT_MEDIA
 
-    BOT_TOKEN = "7014521370:AAHgMni3jXKU4n0hz7l-hFXigTTvseK8yiE"
-    
+    file_id = None
+    is_video = False
+    file_obj = None
 
-    # --- PHOTO ---
     if update.message.photo:
         file = update.message.photo[-1]
         file_id = file.file_id
         file_obj = await file.get_file()
-        tg_url = file_obj.file_path
-
-        print("📷 file_id:", file_id)
-        print("📷 file_path:", file_obj.file_path)
-        print("📷 tg_url:", tg_url)
-
+        is_video = False
+    elif update.message.video:
+        file = update.message.video
+        file_id = file.file_id
+        file_obj = await file.get_file()
+        is_video = True
+    
+    if file_id and file_obj:
+        # Логика загрузки на Flask сервер
         async with aiohttp.ClientSession() as session:
-            async with session.get(tg_url) as resp:
+            async with session.get(file_obj.file_path) as resp:
                 if resp.status == 200:
                     photo_bytes = await resp.read()
                     form = aiohttp.FormData()
@@ -464,414 +435,182 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "photo",
                         photo_bytes,
                         filename=os.path.basename(file_obj.file_path),
-                        content_type="image/jpeg"
+                        content_type="image/jpeg" if not is_video else "video/mp4"
                     )
                     async with session.post(FLASK_UPLOAD_URL, data=form) as upload_resp:
                         if upload_resp.status == 200:
                             result = await upload_resp.json()
                             photo_url = result["url"]
-                            print("✅ Загружено:", photo_url)
+                            logging.info(f"✅ Загружено на Flask: {photo_url}")
 
-                            # 💾 Сохраняем в product_media
+                            # Проверка: если order == 0, но уже есть фото с таким order — меняем
+                            if order == 0:
+                                existing = await fetchone(
+                                    "SELECT COUNT(*) as cnt FROM product_media WHERE variant_id = ? AND \"order\" = 0",
+                                    (variant_id,)
+                                )
+                                if existing and existing["cnt"] > 0:
+                                    max_order_row = await fetchone(
+                                        "SELECT MAX(\"order\") as max_order FROM product_media WHERE variant_id = ?",
+                                        (variant_id,)
+                                    )
+                                    order = (max_order_row["max_order"] or 0) + 1
+
+                            # Сохраняем в БД
                             await execute(
-                                "INSERT INTO product_media (variant_id, file_id, url, is_video, \"order\") VALUES (?, ?, ?, 0, ?)",
-                                (variant_id, file_id, photo_url, order)
+                                "INSERT INTO product_media (variant_id, file_id, url, is_video, \"order\") VALUES (?, ?, ?, ?, ?)",
+                                (variant_id, file_id, photo_url, is_video, order)
                             )
-                            context.user_data['media_order'] = order + 1
+                            context.user_data['media_order'] += 1
 
-                            # 💾 Обновляем превью, если это первое медиа
+                            # ===================================================================
+                            # НАЧАЛО ИЗМЕНЕНИЙ: БЕЗОПАСНО УСТАНАВЛИВАЕМ ОБЛОЖКУ
+                            # ===================================================================
+                            product_id = context.user_data.get('product_id')
+                            if product_id:
+                                # 1. Проверяем, есть ли у товара уже обложка
+                                product_data = await fetchone("SELECT cover_url FROM products WHERE id = ?", (product_id,))
+                                
+                                # 2. Если обложки НЕТ (поле пустое), то устанавливаем ее.
+                                #    Эта проверка сработает только ОДИН РАЗ за всю жизнь товара.
+                                if product_data and not product_data['cover_url']:
+                                    await execute("UPDATE products SET cover_url = ? WHERE id = ?", (photo_url, product_id))
+                                    logging.info(f"✅ Установлена обложка для товара ID {product_id}")
+                            # ===================================================================
+                            # КОНЕЦ ИЗМЕНЕНИЙ
+                            # ===================================================================
+
                             if order == 0:
                                 await execute(
                                     "UPDATE product_variants SET photo_id = ?, photo_url = ? WHERE id = ?",
                                     (file_id, photo_url, variant_id)
                                 )
-
-                            msg = get_effective_message(update)
-                            if msg:
-                                await msg.reply_text("Фото добавлено. Отправьте ещё или напишите /done.")
+                            await update.message.reply_text(f"Медиафайл #{order + 1} добавлен. Отправьте еще или напишите /done.")
                         else:
                             error_text = await upload_resp.text()
-                            print("❌ Ошибка от Flask сервера:", error_text)
-                            await update.message.reply_text("❌ Сервер не принял фото.")
+                            logging.error(f"❌ Ошибка от Flask сервера: {error_text}")
+                            await update.message.reply_text("❌ Сервер не принял файл.")
                 else:
-                    print("❌ Не удалось скачать с Telegram:", resp.status)
-                    await update.message.reply_text("❌ Не удалось скачать фото из Telegram.")
-
-    # --- VIDEO ---
-    elif update.message.video:
-        file = update.message.video
-        file_id = file.file_id
-
-        await execute(
-            "INSERT INTO product_media (variant_id, file_id, is_video, \"order\") VALUES (?, ?, 1, ?)",
-            (variant_id, file_id, order)
-        )
-        context.user_data['media_order'] = order + 1
-
-        if order == 0:
-            await execute(
-                "UPDATE product_variants SET photo_id = ? WHERE id = ?",
-                (file_id, variant_id)
-            )
-
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("🎥 Видео добавлено. Отправьте ещё или напишите /done.")
-
-    # --- INVALID ---
+                    logging.error(f"❌ Не удалось скачать с Telegram: {resp.status}")
+                    await update.message.reply_text("❌ Не удалось скачать файл из Telegram.")
     else:
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Пожалуйста, отправьте фото или видео. Максимум 5 медиа для одного варианта.")
-
-    context.user_data["state"] = "add_variant_media"
-
-    
-
-async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    print("[DEBUG] user_data keys before finish_media:", list(context.user_data.keys()))
-    print("[DEBUG] /done triggered — state:", context.user_data.get("state"))
+        await update.message.reply_text("Отправьте только фото или видео.")
 
 
-    if context.user_data.get("product_addition_finished"):
-        await update.message.reply_text("✅ Все уже завершено. Спасибо!")
-        return
-
-
-    if context.user_data.get("state") != "add_variant_media":
-        await update.message.reply_text("⚠️ Команда /done доступна только во время загрузки фото/видео для варианта.")
-        return
-    context.user_data["state"] = "finish_variant_media"
-    # Если идет добавление варианта в add_product_handler
-    if context.user_data.get("current_product_id") and context.user_data.get("admin_variant_id"):
-        context.user_data.pop('media_order', None)
-        context.user_data.pop('admin_variant_id', None)
-        keyboard = [
-            [InlineKeyboardButton("➕ Да, добавить еще", callback_data="add_more_variants")],
-            [InlineKeyboardButton("✅ Нет, завершить", callback_data="finish_add_product")]
-        ]
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text(
-                "✅ Вариант успешно добавлен. Хотите добавить еще один?",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=ParseMode.HTML
-            )
-        context.user_data["state"] = "ask_add_more_variants"
-        return 
-    # Если это режим редактирования варианта (edit_product)
-    elif context.user_data.get("product_to_edit_id") and context.user_data.get("variant_to_edit_id"):
-        context.user_data.pop('media_order', None)
-        context.user_data.pop('admin_variant_id', None)
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("✅ Фото/видео для варианта успешно добавлены.", parse_mode=ParseMode.HTML)
-            context.user_data["state"] = "edit_menu"
-       
-        await show_edit_menu(update, context)
-        return
-    # Если это отдельный add_media_conv (например, через /addmedia)
-    else:
-        context.user_data.pop('media_order', None)
-        context.user_data.pop('admin_variant_id', None)
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("✅ Фото/видео успешно добавлены.", parse_mode=ParseMode.HTML)
-        context.user_data["state"] = None
-        return
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ADD_VARIANT_MEDIA
         
-async def add_product_media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = context.user_data.get("state")
-    if state == "add_variant_media":
-        return await add_media(update, context)
-    else:
-        # Игнорируем, если не в состоянии ожидания медиа
-        return
+    return ADD_GET_VARIANT_MEDIA
 
-async def handle_done_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await finish_media(update, context)
+async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    keyboard = [
+        [InlineKeyboardButton("➕ Да, добавить еще", callback_data="add_more_variants")],
+        [InlineKeyboardButton("✅ Нет, завершить", callback_data="finish_add_product")]
+    ]
+    await update.message.reply_text(
+        f"✅ Вариант успешно добавлен.Хотите добавить еще один?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    if context.user_data.get("mode") == "edit":
+        return EDIT_ASK_ADD_MORE
+    return ADD_ASK_ADD_MORE_VARIANTS
 
-
-async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["state"] = "ask_add_more_variants"
+async def ask_add_more_variants(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     if query.data == 'add_more_variants':
-        context.user_data["state"] = "choose_variant_size"
-        # Вместо удаления сообщения просто редактируем его, чтобы убрать кнопки
-        await query.edit_message_text(
-            "Добавление нового варианта...",
-            parse_mode=ParseMode.HTML,
-            reply_markup=None
-        )
+        await query.edit_message_text("Добавление нового варианта...")
         await ask_for_variant_size(update, context)
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_SIZE
+        else:
+            return ADD_GET_VARIANT_SIZE
     elif query.data == 'finish_add_product':
-        context.user_data["state"] = "ask_add_more_variants"
-        context.user_data["product_to_edit_id"] = context.user_data.get("current_product_id")
-        keyboard = [[InlineKeyboardButton("↩ Назад к редактированию товара", callback_data="nazad_na_edit")]]
-        await query.edit_message_text(
-            "✅ Отлично! Все варианты для товара сохранены.\n\nВы можете вернуться к редактированию товара.",
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
+        product_name = context.user_data.get('product_name', 'товар')
+        await query.edit_message_text(f"✅ Отлично! Все варианты для товара '{product_name}' сохранены.")
+        if context.user_data.get("mode") == "edit":
+            await show_edit_menu(update, context)
+            return EDIT_AWAIT_ACTION
+        context.user_data.clear()
+        
+        return ConversationHandler.END
 
-    else:
-        await query.edit_message_text(
-            "Неизвестное действие.",
-            parse_mode=ParseMode.HTML,
-            reply_markup=None
-        )
-
-    return ASK_ADD_MORE_VARIANTS
+# =================================================================
+# === ПРОЦЕСС РЕДАКТИРОВАНИЯ ТОВАРА (НОВЫЙ CONVERSATIONHANDLER) ===
+# =================================================================
 
 
 
 
-
-
-    
-
-
-# === Часть 3: Редактирование/удаление товаров и вариантов, отчёты, подтверждение заказов ===
-
-# --- Редактирование и удаление товаров/вариантов ---
-async def start_edit_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def confirm_variant_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    msg = get_effective_message(update)
-    if not is_admin(update.effective_user.id):
-        if msg:
-            await msg.reply_text("Нет доступа.", parse_mode=ParseMode.HTML)
-        return ConversationHandler.END
-    product_id = context.user_data.get('product_to_edit_id')
-    if not product_id:
-        if msg:
-            await msg.reply_text("ID товара не определён. Повторите попытку через меню.", parse_mode=ParseMode.HTML)
-        return ConversationHandler.END
-    context.user_data["state"] = "edit_menu"
-    context.user_data['product_to_edit_id'] = product_id
+    if query.data == "confirm_delete_variant":
+        variant_id = context.user_data.get('variant_to_delete')
+        await execute("DELETE FROM product_variants WHERE id = ?", (variant_id,))
+        await query.edit_message_text("✅ Вариант удален. Обновляю меню...")
+    else: # cancel_delete
+        await query.edit_message_text("Удаление отменено.")
+        
     await show_edit_menu(update, context)
-    return AWAIT_EDIT_ACTION
-    
+    return EDIT_AWAIT_ACTION
 
-async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    product_id = context.user_data.get('product_to_edit_id')
+async def confirm_full_product_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    if query.data == "confirm_delete_full":
+        product_id = context.user_data.get('product_to_delete')
+        await execute("DELETE FROM product_variants WHERE product_id = ?", (product_id,))
+        await execute("DELETE FROM products WHERE id = ?", (product_id,))
+        await query.edit_message_text(f"✅ Товар с ID {product_id} и все его варианты были полностью удалены.")
+        
+        context.user_data.clear()
+        return ConversationHandler.END
+    else: # cancel_delete
+        await query.edit_message_text("Удаление отменено.")
+        await asyncio.sleep(1)
+        await show_edit_menu(update, context)
+        return EDIT_AWAIT_ACTION
 
-    # Безопасная проверка: если product_id не найден — просто выходим
-    if not product_id:
-        await update.effective_message.reply_text(
-            "⚠️ Не удалось определить товар для редактирования. Пожалуйста, начните заново.",
-            parse_mode=ParseMode.HTML
-        )
-        return
-
-    product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
-    if not product:
-        await update.effective_message.reply_text(
-            f"❌ Товар с ID <code>{product_id}</code> не найден.",
-            parse_mode=ParseMode.HTML
-        )
-        return
-
-    variants = await fetchall("""
-        SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
-        FROM product_variants pv
-        LEFT JOIN sizes s ON pv.size_id = s.id
-        LEFT JOIN colors c ON pv.color_id = c.id
-        WHERE pv.product_id = ?
-    """, (product_id,))
-
-    safe_name = product['name']
-    message_text = f"⚙️ Редактирование <b>{safe_name}</b> (ID: {product_id})\n\nВыберите действие:"
-
-    keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
-    
-    if variants:
-        keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
-        for v in variants:
-            v_text = f"{v['size_name']}, {v['color_name']} | {v['price']}₸ ({v['quantity']} шт.)"
-            keyboard.append([
-                InlineKeyboardButton(v_text, callback_data=f"edit_variant_menu_{v['id']}"),
-                InlineKeyboardButton("🗑️", callback_data=f"delete_variant_{v['id']}")
-            ])
-
-    keyboard.append([InlineKeyboardButton("➕ Добавить новый вариант", callback_data=f"add_variant_to_{product_id}")])
-    keyboard.append([InlineKeyboardButton("❌ Удалить товар ПОЛНОСТЬЮ", callback_data=f"delete_product_full_{product_id}")])
-    keyboard.append([InlineKeyboardButton("⬅️ Завершить", callback_data="edit_cancel")])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    try:
-        if getattr(update, 'callback_query', None):
-            query = update.callback_query
-            await query.answer()
-            await query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
-        else:
-            msg = get_effective_message(update)
-            if msg:
-                await msg.reply_text(message_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        print(f"Ошибка при показе меню редактирования: {e}")
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=message_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=reply_markup
-        )
-
-
-    return AWAIT_EDIT_ACTION
-
-
-async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🧩 [DEBUG] handle_edit_action вызван")
-    print("📌 user_data:", context.user_data)
-    print("📌 update.callback_query.data:", update.callback_query.data)
+async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     data = query.data
-    if data.startswith("delete_variant_"):
-        context.user_data['variant_to_delete'] = int(data.split('_')[2])
-        keyboard = [
-            [InlineKeyboardButton("✅ Да, удалить вариант", callback_data="confirm_delete_variant"),
-             InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]
-        ]
-        await query.edit_message_text("Вы уверены?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-        return CONFIRM_DELETE_VARIANT
-    elif data.startswith("delete_product_full_"):
-        keyboard = [
-            [InlineKeyboardButton("✅ Да, удалить ВСЁ", callback_data="confirm_delete_full"),
-             InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]
-        ]
-        await query.edit_message_text("Вы уверены, что хотите удалить товар и ВСЕ его варианты?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-        return CONFIRM_DELETE_FULL_PRODUCT
-    elif data.startswith("add_variant_to_"):
-        context.user_data['current_product_id'] = int(data.split('_')[3])
-        await query.edit_message_text("Перехожу в режим добавления нового варианта...", parse_mode=ParseMode.HTML)
-        await ask_for_variant_size(update, context)
-        return SELECT_VARIANT_SIZE
-    elif data.startswith("edit_variant_menu_"):
-        context.user_data['variant_to_edit_id'] = int(data.split('_')[3])
-        keyboard = [
-            [InlineKeyboardButton("Цену", callback_data=f"edit_field_price")],
-            [InlineKeyboardButton("Количество", callback_data=f"edit_field_quantity")],
-            [InlineKeyboardButton("Фото", callback_data=f"edit_field_photo")],
-            [InlineKeyboardButton("⬅️ Назад к списку вариантов", callback_data="back_to_edit_menu_main")]
-        ]
-        await query.edit_message_text("Что изменить в этом варианте?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-        return SELECT_VARIANT_FIELD
-    elif data == "back_to_edit_menu_main":
+
+    if data == "back_to_edit_menu":
         await show_edit_menu(update, context)
-        return AWAIT_EDIT_ACTION
-    elif data == "edit_cancel":
-    # Удаляем фото, если message_id сохранён
-        msg_id = context.user_data.get('edit_photo_message_id')
-        if msg_id:
-            try:
-                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
-            except Exception:
-                pass  # если сообщение уже удалено или слишком старое
-            context.user_data.pop('edit_photo_message_id', None)
-        context.user_data.clear()
-        await query.edit_message_text("Редактирование завершено.", parse_mode=ParseMode.HTML)
-        return ConversationHandler.END
-    else:
-        await query.edit_message_text("Эта функция пока в разработке.", parse_mode=ParseMode.HTML)
-        await show_edit_menu(update, context)
-        return AWAIT_EDIT_ACTION
+        return EDIT_AWAIT_ACTION
 
-async def confirm_variant_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "cancel_delete":
-        return await show_edit_menu(update, context)
-    variant_id = context.user_data.get('variant_to_delete')
-    await execute("DELETE FROM product_variants WHERE id = ?", (variant_id,))
-    await query.edit_message_text("✅ Вариант удален. Обновляю меню...", parse_mode=ParseMode.HTML)
-    await show_edit_menu(update, context)
-    return AWAIT_EDIT_ACTION
-
-async def confirm_full_product_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "cancel_delete":
-        return await show_edit_menu(update, context)
-    product_id = context.user_data.get('product_to_edit_id')
-    await execute("DELETE FROM product_variants WHERE product_id = ?", (product_id,))
-    await execute("DELETE FROM products WHERE id = ?", (product_id,))
-    await query.edit_message_text(f"✅ Товар с ID {product_id} и все его варианты были полностью удалены.", parse_mode=ParseMode.HTML)
-    context.user_data.clear()
-    return ConversationHandler.END
-
-async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    field_to_edit = query.data.split('_')[2]
+    field_to_edit = data.split('_')[2] # edit_field_price -> price
     context.user_data['field_to_edit'] = field_to_edit
+    
     if field_to_edit == "photo":
-        context.user_data['admin_variant_id'] = context.user_data['variant_to_edit_id']
+        # Для редактирования фото мы можем переиспользовать логику добавления
+        context.user_data['current_variant_id'] = context.user_data.get('variant_to_edit_id')
         context.user_data['media_order'] = 0
         await query.edit_message_text("Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done.")
-        return GET_VARIANT_PHOTO
-    prompt = (f"Введите новое значение для поля '{field_to_edit}':")
-    keyboard = [[InlineKeyboardButton("⬅️ Назад к списку вариантов", callback_data="back_to_edit_menu_main")]]
-    await query.edit_message_text(prompt, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    return GET_NEW_VARIANT_VALUE
+        return EDIT_ADD_VARIANT_MEDIA 
+        
+    prompt = f"Введите новое значение для поля '{field_to_edit}':"
+    await query.edit_message_text(prompt)
+    return EDIT_GET_NEW_VARIANT_VALUE
 
-async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     field = context.user_data.get('field_to_edit')
     variant_id = context.user_data.get('variant_to_edit_id')
-    if update.message and update.message.text and update.message.text == "⬅️ Назад к списку вариантов":
-        await show_edit_menu(update, context)
-        return AWAIT_EDIT_ACTION
-    new_value = None
-    if field == 'photo':
-        if update.message.photo:
-            new_value = update.message.photo[-1].file_id
-            field = 'photo_id'
-        else:
-            keyboard = [[InlineKeyboardButton("⬅️ Назад к списку вариантов", callback_data="back_to_edit_menu_main")]]
-            msg = get_effective_message(update)
-            if msg:
-                await msg.reply_text(
-                    "Пожалуйста, отправьте фото.",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode=ParseMode.HTML
-                )
-            return GET_NEW_VARIANT_VALUE
-    else:
-        new_value_text = update.message.text
-        if new_value_text == "⬅️ Назад к списку вариантов":
-            await show_edit_menu(update, context)
-            return AWAIT_EDIT_ACTION
-        try:
-            new_value = float(new_value_text) if field == 'price' else int(new_value_text)
-        except ValueError:
-            keyboard = [[InlineKeyboardButton("⬅️ Назад к списку вариантов", callback_data="back_to_edit_menu_main")]]
-            msg = get_effective_message(update)
-            if msg:
-                # Если не удалось преобразовать значение, сообщаем об ошибке
-                await msg.reply_text(
-                    "Неверный формат. Введите число.",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode=ParseMode.HTML
-                )
-            return GET_NEW_VARIANT_VALUE
+    new_value_text = update.message.text
+    
     try:
-        await execute(f"UPDATE product_variants SET {field} = ? WHERE id = ?", (new_value, variant_id))
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text(f"✅ Поле '{field}' для варианта успешно обновлено.", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        print(f"Ошибка при обновлении варианта: {e}")
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Ошибка при обновлении базы данных.", parse_mode=ParseMode.HTML)
-    await show_edit_menu(update, context)
-    return AWAIT_EDIT_ACTION
+        new_value = float(new_value_text) if field == 'price' else int(new_value_text)
+    except ValueError:
+        await update.message.reply_text("Неверный формат. Введите число.")
+        return EDIT_GET_NEW_VARIANT_VALUE
 
+    await execute(f"UPDATE product_variants SET {field} = ? WHERE id = ?", (new_value, variant_id))
+    await update.message.reply_text(f"✅ Поле '{field}' для варианта успешно обновлено.")
+    
+    await show_edit_menu(update, context)
+    return EDIT_AWAIT_ACTION
 
 
 # --- Отчёты ---
@@ -901,14 +640,15 @@ async def get_sales_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(report_message, parse_mode=ParseMode.HTML)
     
 
-from bee import fetch_products_detailed, export_to_gsheet, download_xlsx, GOOGLE_SHEET_URL
+from bee import fetch_products_detailed, export_to_gsheet, download_products_xlsx, GOOGLE_SHEET_URL
 # --- Отчёт по товарам ---
 async def send_products_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Получаем актуальные данные и обновляем Google Sheet
     data = fetch_products_detailed()
     export_to_gsheet(data)
     # 2. Скачиваем .xlsx-файл
-    xlsx_file = download_xlsx()
+    xlsx_file = download_products_xlsx()
+
     # 3. Отправляем ссылку на Google Таблицу
     msg = get_effective_message(update)
     if msg:
@@ -936,7 +676,6 @@ PERIODS = {
     "30days": "последние 30 дней"
 }
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 async def ask_orders_report_period(update, context):
     keyboard = [
@@ -953,9 +692,12 @@ async def ask_orders_report_period(update, context):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+from bee import prepare_orders_data_for_gsheet, export_orders_to_gsheet, download_xlsx
+
 async def handle_orders_report_period(update, context):
     query = update.callback_query
     await query.answer()
+    
     period_key = query.data.split("_")[-1]
     period_map = {
         "today": "today",
@@ -967,9 +709,36 @@ async def handle_orders_report_period(update, context):
     if not period:
         await query.edit_message_text("Некорректный период.")
         return
-    orders = fetch_orders_report(period)
-    text = make_orders_report_text(orders, PERIODS[period])
-    await query.edit_message_text(text)
+
+    await query.edit_message_text("Генерирую отчёт по заказам, подождите...")
+
+    # Генерация данных
+    data = prepare_orders_data_for_gsheet(period)
+    if len(data) == 1:
+        await query.message.reply_text("❗️Заказов за выбранный период не найдено.")
+        return
+
+    # Экспорт в Google Sheet
+    spreadsheet_id, sheet_url = export_orders_to_gsheet(data, f"заказы_{period}")
+
+    # Скачивание .xlsx
+    xlsx_file = download_xlsx(spreadsheet_id, filename=f"orders_report_{period}.xlsx")
+
+    # Отправка ссылки и файла
+    await query.message.reply_text(f"🔗 Ссылка на Google Таблицу:\n{sheet_url}")
+    
+    if xlsx_file:
+        with open(xlsx_file, "rb") as f:
+            await query.message.reply_document(
+                document=f,
+                filename=f"orders_report_{period}.xlsx",
+                caption=f"📄 Отчёт по заказам ({PERIODS[period]})"
+            )
+    else:
+        await query.message.reply_text("⚠️ Не удалось скачать .xlsx-файл.")
+
+
+
 
 
 async def report_combined(update, context):
@@ -977,67 +746,7 @@ async def report_combined(update, context):
     await send_products_report(update, context)
 
 
-# --- Подтверждение заказа админом ---
-async def handle_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    parts = query.data.split('_')
-    # Проверка что parts[2] — это число
-    if len(parts) < 3 or not parts[2].isdigit():
-        await query.edit_message_text("Ошибка: некорректный формат callback data.", parse_mode=ParseMode.HTML)
-        return
-    action, order_id_str = query.data.split('_')[1], query.data.split('_')[2]
-    order_id = int(order_id_str)
-    order = await fetchone("SELECT * FROM orders WHERE id = ?", (order_id,))
-    if order["status"] == "cancelled_by_client":
-        await query.edit_message_text(
-            f"⚠️ Невозможно изменить статус — заказ №{order_id} отменён клиентом.",
-            parse_mode=ParseMode.HTML
-        )
-        return
 
-    if not order:
-        await query.edit_message_text("Заказ не найден.", parse_mode=ParseMode.HTML)
-        return
-    customer_user_id = order['user_id']
-    if action == "confirm":
-        try:
-            cart = json.loads(order['cart'])
-
-            # 💥 Ключевая проверка: избежать двойного списания
-            if str(order["deducted_from_stock"]) != "1":
-                for variant_id_str, item in cart.items():
-                    await execute(
-                        "UPDATE product_variants SET quantity = quantity - ? WHERE id = ?",
-                        (item['quantity'], int(variant_id_str))
-                    )
-
-                await execute("UPDATE orders SET deducted_from_stock = 1 WHERE id = ?", (order_id,))
-
-            await execute("UPDATE orders SET status = ? WHERE id = ?", ('confirmed', order_id))
-            kb = [[InlineKeyboardButton("История заказов 🗒" , callback_data="order_history")]]
-            await context.bot.send_message(
-                chat_id=customer_user_id,
-                text= f"<b>✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные</b>",
-
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(kb)
-            )
-
-            status_buttons = [
-                [InlineKeyboardButton("🔄 Готовится к доставке", callback_data=f"status_preparing_{order_id}")],
-                [InlineKeyboardButton("🚚 Отправлен", callback_data=f"status_shipped_{order_id}")],
-                [InlineKeyboardButton("📦 Доставлен", callback_data=f"status_delivered_{order_id}")],
-                [InlineKeyboardButton("❌ Отклонить заказ", callback_data=f"admin_reject_after_confirm_{order_id}")]
-            ]
-
-            await query.edit_message_text(
-                f"Заказ №{order_id} подтверждён.\n\nВыберите следующий статус:",
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(status_buttons)
-            )
-        except Exception:
-            await query.edit_message_text("Ошибка при подтверждении заказа.", parse_mode=ParseMode.HTML)
 
 
 
@@ -1082,7 +791,7 @@ async def update_order_status_admin(update: Update, context: ContextTypes.DEFAUL
 
     try:
         cart = json.loads(order['cart'])
-        cart_text = "\n".join([f"• {item['name']} (x{item['quantity']})" for item in cart.values()])
+        cart_text = "\n".join([f"• {item['name']} (x{item['quantity']})\nБренд: {item.get('brand', 'Не указано')}" for item in cart.values()])
     except Exception:
         cart_text = "Ошибка при разборе состава заказа"
 
@@ -1161,97 +870,137 @@ async def update_order_status_admin(update: Update, context: ContextTypes.DEFAUL
 
 
 
-async def handle_admin_rejection_after_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- ЕДИНЫЙ ОБРАБОТЧИК РЕШЕНИЙ АДМИНА ---
+async def admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    logging.info(f"🔥 Универсальный обработчик решений админа: {query.data}")
 
-    order_id = int(query.data.split('_')[-1])
+    parts = query.data.split('_')
+    # Умное определение action и order_id для разных форматов коллбэка
+    if len(parts) > 3 and parts[2] == "after": # Формат admin_reject_after_confirm_13
+        action = "_".join(parts[:4])
+        order_id = int(parts[4])
+    else: # Формат admin_confirm_13 или admin_reject_13
+        action = "_".join(parts[:2])
+        order_id = int(parts[2])
+
+    # --- Получаем заказ из БД ---
     order = await fetchone("SELECT * FROM orders WHERE id = ?", (order_id,))
     if not order:
         await query.edit_message_text("❌ Заказ не найден.")
         return
 
-    # 🔐 Защита от повторного отклонения
-    if order["status"] in ("delivered", "cancelled_by_client", "rejected"):
-        await query.edit_message_text("⚠️ Заказ уже завершён или отменён.")
+    # --- Проверяем, не отменил ли его уже клиент ---
+    if order["status"] == "cancelled_by_client":
+        await query.edit_message_text(f"⚠️ Невозможно изменить статус — заказ №{order_id} отменён клиентом.")
         return
-
-    if str(order["deducted_from_stock"]) == "1":
-
+        
+    # --- ЛОГИКА ДЛЯ "ПОДТВЕРДИТЬ" ---
+    if action == "admin_confirm":
         try:
-            cart = json.loads(order["cart"])
-            for variant_id_str, item in cart.items():
-                await execute(
-                    "UPDATE product_variants SET quantity = quantity + ? WHERE id = ?",
-                    (item['quantity'], int(variant_id_str))
-                )
-            await execute("UPDATE orders SET deducted_from_stock = 0 WHERE id = ?", (order_id,))
+            cart = json.loads(order['cart'])
 
+            # 💥 Ключевая проверка: избежать двойного списания
+            if str(order["deducted_from_stock"]) != "1":
+                for variant_id_str, item in cart.items():
+                    await execute(
+                        "UPDATE product_variants SET quantity = quantity - ? WHERE id = ?",
+                        (item['quantity'], int(variant_id_str))
+                    )
+                await execute("UPDATE orders SET deducted_from_stock = 1 WHERE id = ?", (order_id,))
+
+            await execute("UPDATE orders SET status = ? WHERE id = ?", ('confirmed', order_id))
+            
+            kb = [[InlineKeyboardButton("История заказов 🗒" , callback_data="order_history")]]
+            await context.bot.send_message(
+                chat_id=order["user_id"],
+                text=f"<b>✅ Ваш заказ №{order_id} подтвержден! \n\nВы можете отслеживать заказ :\nГлавное меню ➡ История заказов ➡ 🟡Активные</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+
+            status_buttons = [
+                [InlineKeyboardButton("🔄 Готовится к доставке", callback_data=f"status_preparing_{order_id}")],
+                [InlineKeyboardButton("🚚 Отправлен", callback_data=f"status_shipped_{order_id}")],
+                [InlineKeyboardButton("📦 Доставлен", callback_data=f"status_delivered_{order_id}")],
+                [InlineKeyboardButton("❌ Отклонить заказ", callback_data=f"admin_reject_after_confirm_{order_id}")]
+            ]
+
+            await query.edit_message_text(
+                f"Заказ №{order_id} подтверждён.\n\nВыберите следующий статус:",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(status_buttons)
+            )
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка при возврате товаров: {e}")
-            return
-    else:
+            logging.exception(f"❌ Ошибка при подтверждении заказа: {e}")
+            await query.edit_message_text("Ошибка при подтверждении заказа.")
+
+    # --- ЛОГИКА ДЛЯ "ОТКЛОНИТЬ" (любого типа) ---
+    elif 'admin_reject' in action:
+        # --- Сначала возвращаем товары на склад, если они были списаны ---
+        if str(order["deducted_from_stock"]) == "1":
+            try:
+                cart = json.loads(order["cart"])
+                for variant_id_str, item in cart.items():
+                    await execute(
+                        "UPDATE product_variants SET quantity = quantity + ? WHERE id = ?",
+                        (item['quantity'], int(variant_id_str))
+                    )
+                await execute("UPDATE orders SET deducted_from_stock = 0 WHERE id = ?", (order_id,))
+            except Exception as e:
+                await query.edit_message_text(f"❌ Ошибка при возврате товаров: {e}")
+                return
+        
+        # --- Обновляем статус в БД ---
+        await execute("UPDATE orders SET status = ? WHERE id = ?", ("rejected", order_id))
+
+        # --- Формируем и отправляем уведомления ---
         cart = json.loads(order['cart'])
+        cart_text = "\n".join([f"• {item['name']} x{item['quantity']}" for item in cart.values()])
+        
+        username = None
+        try:
+            user_obj = await context.bot.get_chat(order["user_id"])
+            username = user_obj.username
+        except Exception:
+            pass
+        
+        user_link = f'<a href="https://t.me/{username}">@{username}</a>' if username else "нет username"
+        support_user = "candyy_sh0p" # <-- Замени на свой контакт, если нужно
+        admin_link = f'<a href="https://t.me/{support_user}">@{support_user}</a>'
 
-    # 🧾 Формируем состав заказа
-    cart_text = "\n".join([
-        f"• {item['name']} x{item['quantity']}" for item in cart.values()
-    ])
+        order_info_admin = (
+            f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
+            f"<b>Сумма:</b> {order['total_price']} ₸\n"
+            f"<b>Клиент:</b> {order['user_name']}\n"
+            f"<b>Username:</b> {user_link}\n"
+            f"<b>Телефон:</b> {order['user_phone']}\n"
+            f"<b>Адрес:</b> {order['user_address']}\n\n"
+            f"<b>Состав заказа:</b>\n{cart_text}"
+        )
+        
+        order_info_user = (
+             f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
+             f"<b>Сумма:</b> {order['total_price']} ₸\n"
+             f"<b>Клиент:</b> {order['user_name']}\n"
+             f"<b>Телефон:</b> {order['user_phone']}\n"
+             f"<b>Адрес:</b> {order['user_address']}\n\n"
+             f"<b>Состав заказа:</b>\n{cart_text}\n\n"
+             f"Админ: {admin_link}"
+        )
 
-    # 👤 Получаем username (если есть)
-    username = None
-    try:
-        user_obj = await context.bot.get_chat(order["user_id"])
-        username = user_obj.username
-    except Exception:
-        pass
+        await query.edit_message_text(
+            f"❌ Заказ №{order_id} отклонён админом.\n\n{order_info_admin}",
+            parse_mode=ParseMode.HTML
+        )
 
-    user_link = (
-        f'<a href="https://t.me/{username}">@{username}</a>' if username else "нет username"
-    )
-
-    support_user = "candyy_sh0p"
-    admin_link = f'<a href="https://t.me/{support_user}">@{support_user}</a>'
-
-    # 📦 Информация для админа
-    order_info_admin = (
-        f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
-        f"<b>Сумма:</b> {order['total_price']} ₸\n"
-        f"<b>Клиент:</b> {order['user_name']}\n"
-        f"<b>Username:</b> {user_link}\n"
-        f"<b>Телефон:</b> {order['user_phone']}\n"
-        f"<b>Адрес:</b> {order['user_address']}\n\n"
-        f"<b>Состав заказа:</b>\n{cart_text}"
-    )
-
-    # 📩 Информация для клиента
-    order_info_user = (
-        f"<b>📦 Информация о заказе №{order_id}</b>\n\n"
-        f"<b>Сумма:</b> {order['total_price']} ₸\n"
-        f"<b>Клиент:</b> {order['user_name']}\n"
-        f"<b>Телефон:</b> {order['user_phone']}\n"
-        f"<b>Адрес:</b> {order['user_address']}\n\n"
-        f"<b>Состав заказа:</b>\n{cart_text}\n\n"
-        f"Админ: {admin_link}"
-    )
-
-    # ❌ Обновляем статус
-    await execute("UPDATE orders SET status = ? WHERE id = ?", ("rejected", order_id))
-
-    # 🛑 Уведомляем админа
-    await query.edit_message_text(
-        f"❌ Заказ №{order_id} отклонён админом.\n\n{order_info_admin}",
-        parse_mode=ParseMode.HTML
-    )
-
-    # 📩 Уведомляем клиента
-    await context.bot.send_message(
-        chat_id=order["user_id"],
-        text=f"❌ Ваш заказ №{order_id} был отклонен администратором.\n\n{order_info_user}",
-        parse_mode=ParseMode.HTML
-    )
-
-
+        await context.bot.send_message(
+            chat_id=order["user_id"],
+            text=f"❌ Ваш заказ №{order_id} был отклонен администратором.\n\n{order_info_user}",
+            parse_mode=ParseMode.HTML
+        )
 
 
 # --- Статусы ---
@@ -1272,15 +1021,15 @@ async def order_history_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     filter_keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📋 Все", callback_data="order_filter_all"),
-            InlineKeyboardButton("🟡 Активные", callback_data="order_filter_active"),
-            InlineKeyboardButton("✅ Завершённые", callback_data="order_filter_finished") , 
+            InlineKeyboardButton("📋Все", callback_data="order_filter_all"),
+            InlineKeyboardButton("🟡Активные", callback_data="order_filter_active"),
+            InlineKeyboardButton("✅Завершённые", callback_data="order_filter_finished") , 
             InlineKeyboardButton("◀ назад " , callback_data="back_to_main_menu" )
         ]
     ])
 
     await query.edit_message_text(
-        text="📋 Выберите, какие заказы хотите посмотреть:",
+        text="📋 Выберите, какие заказы хотите посмотреть:                     ",
         parse_mode=ParseMode.HTML,
         reply_markup=filter_keyboard
     )
@@ -1315,7 +1064,8 @@ async def order_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    context.user_data["order_list"] = orders
+    context.user_data["order_list"] = [dict(o) for o in orders]
+
     await show_orders_text(update, context, orders, filter_type, 0)
 
 
@@ -1354,8 +1104,9 @@ async def show_orders_text(update, context, orders, filter_type, page):
     status = f"{status_names.get(raw_status, raw_status)}"
     total = f"{order['total_price']}"
     cart = json.loads(order["cart"])
+    
     cart_text = "\n".join([
-        f"• {item['name']} (x{item['quantity']})" for item in cart.values()
+        f"• {item['name']} (x{item['quantity']})\nБренд: {item.get('brand', 'Не указано')}" for item in cart.values()
     ])
     msg = (
         f"🧾 <b>Чек №{order_id}</b>\n\n"
@@ -1365,7 +1116,7 @@ async def show_orders_text(update, context, orders, filter_type, page):
         f"<b>Сумма:</b> {total} ₸\n\n"
         f"<b>Статус:</b> <i>{status}</i>\n\n"
         f"<b>Состав:</b>\n{cart_text}\n\n"
-        f"<b>Дата:</b> {order['created_at']}"
+        f"<b>Дата:</b> {convert_to_local_time(order['created_at'])}"
     )
 
     buttons = []
@@ -1657,7 +1408,7 @@ async def handle_subcat_manage(update, context):
 
 
 RENAME_SUBCAT = 2002
-
+@cleanup_before_entry
 async def start_rename_subcat(update, context):
     query = update.callback_query
     await query.answer()
@@ -1763,7 +1514,7 @@ async def handle_brand_manage(update, context):
 from telegram.ext import ConversationHandler, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 RENAME_BRAND = 2001
-
+@cleanup_before_entry
 async def start_rename_brand(update, context):
     query = update.callback_query
     await query.answer()
@@ -1822,90 +1573,173 @@ def admin_menu_keyboard():
         [InlineKeyboardButton("📦 Отчёт по заказам", callback_data="admin_orders_report")],
     ])
 
-async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@cleanup_before_entry
+async def admin_menu_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+
+    """Входная точка для всей админ-панели."""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("Нет доступа.", parse_mode="HTML")
+        await update.message.reply_text("Нет доступа.")
         return ConversationHandler.END
-    await update.message.reply_text(
+    if update.callback_query:
+        await query.answer()
+        await query.edit_message_text(
         "⚙️ <b>Админ-панель. Выберите действие:</b>",
         reply_markup=admin_menu_keyboard(),
-        parse_mode="HTML"
+        parse_mode=ParseMode.HTML
     )
-    return ADMIN_MENU_AWAIT
-
-
-async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-
-    if data == "admin_add_new_product":
-        await query.answer("Начинаю добавление нового товара...")
-        context.user_data.clear()
-        
-        
-        
-        return await start_add_product(update, context)  # <----- обязательно!
-    
-    elif data == "admin_manage_categories":
-        await query.edit_message_text("Управление категориями:")
-        await manage_categories(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_manage_subcategories":
-        await query.edit_message_text("Введите ID категории для управления подкатегориями:")
-        return ADMIN_SUBCAT_AWAIT_ID
-
-    elif data == "admin_manage_brands":
-        await query.edit_message_text("Управление брендами:")
-        await manage_brands(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_report":
-        await query.edit_message_text(f"Формирую отчёт... \nПожалуйста подождите 10-20 секунд.")
-        await report_combined(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_orders_report":
-        await query.edit_message_text("Формирую отчёт по заказам...")
-        await ask_orders_report_period(update, context)
-        return ConversationHandler.END  # <----- обязательно!
-
-    elif data == "admin_edit_product":
-        await query.edit_message_text("Введите ID товара для редактирования:")
-        return ADMIN_EDIT_AWAIT_ID
-
     else:
-        await query.edit_message_text("Неизвестная команда.")
-        return ConversationHandler.END
-
-async def nazad_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    data = query.data
-    await query.answer()
-    if data == "admin_menu":
-        await query.edit_message_text(
+        await update.message.reply_text(
             "⚙️ <b>Админ-панель. Выберите действие:</b>",
             reply_markup=admin_menu_keyboard(),
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
+    
+
+    
+    return ADMIN_MENU_AWAIT
+
+async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает нажатия в главном меню админки."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Эти команды не меняют состояние, а просто выполняют действие и выходят из диалога
+    if data in ["admin_manage_categories", "admin_manage_brands", "admin_report", "admin_orders_report"]:
+        if data == "admin_manage_categories":
+            await query.edit_message_text("Управление категориями:")
+            await manage_categories(update, context) # Предполагается, что эта функция существует
+        
+        elif data == "admin_manage_subcategories":
+            await query.edit_message_text("Введите ID категории для управления подкатегориями:")
+            return ADMIN_SUBCAT_AWAIT_ID
+
+        elif data == "admin_manage_brands":
+            await query.edit_message_text("Управление брендами:")
+            await manage_brands(update, context)
+            return ConversationHandler.END  # <----- обязательно!
+
+        elif data == "admin_report":
+            await query.edit_message_text(f"Формирую отчёт... \nПожалуйста подождите 10-20 секунд.")
+            await report_combined(update, context)
+            return ConversationHandler.END  # <----- обязательно!
+
+        elif data == "admin_orders_report":
+            await query.edit_message_text("Формирую отчёт по заказам...")
+            await ask_orders_report_period(update, context)
+            return ConversationHandler.END  # <----- обязательно!
+
+        
+
+        # Эти команды переводят диалог в новое состояние
+    elif data == "admin_edit_product":
+            context.user_data["mode"] = "edit"
+            await query.edit_message_text("Введите ID товара для редактирования:")
+            return ADMIN_AWAIT_EDIT_ID
+            
+    elif data == "admin_manage_subcategories":
+            await query.edit_message_text("Введите ID категории для управления подкатегориями:")
+            return ADMIN_AWAIT_SUBCAT_ID
+
+    return ADMIN_MENU_AWAIT
+
+async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получает АРТИКУЛ товара и переходит в меню редактирования."""
+    sku = update.message.text.strip()
+
+    # Артикул бойынша базадан тауарды іздейміз
+    product = await fetchone("SELECT id FROM products WHERE sku = ?", (sku,))
+
+    if not product:
+        await update.message.reply_text(f"❌ Товар с артикулом '{sku}' не найден. Попробуйте снова.")
+        # Сол күйде қаламыз, жаңа артикул күтіп
+        return ADMIN_AWAIT_EDIT_ID
+
+    # Табылған тауардың ID-ын келесі қадамдар үшін сақтаймыз
+    context.user_data['product_to_edit_id'] = product['id']
+
+    # Редакциялау менюін көрсетеміз
+    await show_edit_menu(update, context)
+
+    # Келесі күйге өтеміз
+    return EDIT_AWAIT_ACTION
+
+
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает главное меню редактирования с вариантами."""
+    product_id = context.user_data.get('product_to_edit_id')
+    product = await fetchone("SELECT * FROM products WHERE id = ?", (product_id,))
+    
+    variants = await fetchall("""
+        SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
+        FROM product_variants pv
+        LEFT JOIN sizes s ON pv.size_id = s.id
+        LEFT JOIN colors c ON pv.color_id = c.id
+        WHERE pv.product_id = ?
+    """, (product_id,))
+
+    message_text = f"⚙️ Редактирование <b>{product['name']}</b> (ID: {product_id})\n\nВыберите действие:"
+    keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
+    if variants:
+        keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
+        for v in variants:
+            v_text = f"{v['size_name']}, {v['color_name']} | {v['price']}₸ ({v['quantity']} шт.)"
+            keyboard.append([
+                InlineKeyboardButton(v_text, callback_data=f"edit_variant_menu_{v['id']}"),
+                InlineKeyboardButton("🗑️", callback_data=f"delete_variant_{v['id']}")
+            ])
+    keyboard.append([InlineKeyboardButton("➕ Добавить новый вариант", callback_data=f"add_variant_to_{product_id}")])
+    keyboard.append([InlineKeyboardButton("❌ Удалить товар ПОЛНОСТЬЮ", callback_data=f"delete_product_full_{product_id}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Назад в админ-меню", callback_data="back_to_admin_menu")])
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    else:
+        await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+
+async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает нажатия в главном меню редактирования."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "back_to_admin_menu":
+        await query.edit_message_text("Возврат в главное меню...")
+        await admin_menu_entry(update, context)
         return ADMIN_MENU_AWAIT
 
-async def admin_edit_await_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    product_id = update.message.text.strip()
-    msg = get_effective_message(update)
-    if not product_id.isdigit():
-        msg = get_effective_message(update)
-        if msg:
-            await msg.reply_text("Некорректный ID товара, попробуйте ещё раз или /cancel для отмены.")
-        return ADMIN_EDIT_AWAIT_ID
-    context.user_data['product_to_edit_id'] = int(product_id)
+    elif data.startswith("delete_variant_"):
+        context.user_data['variant_to_delete'] = int(data.split('_')[2])
+        keyboard = [[InlineKeyboardButton("✅ Да, удалить вариант", callback_data="confirm_delete_variant"), InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]]
+        await query.edit_message_text("Вы уверены?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return EDIT_CONFIRM_DELETE_VARIANT
+
+    elif data.startswith("delete_product_full_"):
+        context.user_data['product_to_delete'] = int(data.split('_')[3])
+        keyboard = [[InlineKeyboardButton("✅ Да, удалить ВСЁ", callback_data="confirm_delete_full"), InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")]]
+        await query.edit_message_text("Вы уверены, что хотите удалить товар и ВСЕ его варианты?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return EDIT_CONFIRM_DELETE_FULL_PRODUCT
+
+    elif data.startswith("add_variant_to_"):
+        context.user_data['product_id'] = int(data.split('_')[3])
+        context.user_data["mode"] = "edit"
+        await query.edit_message_text("Добавление нового варианта к существующему товару...")
+        await ask_for_variant_size(update, context)
+        return EDIT_ADD_VARIANT_SIZE
+
+    elif data.startswith("edit_variant_menu_"):
+        context.user_data['variant_to_edit_id'] = int(data.split('_')[3])
+        keyboard = [
+            [InlineKeyboardButton("Цену", callback_data="edit_field_price")],
+            [InlineKeyboardButton("Количество", callback_data="edit_field_quantity")],
+            [InlineKeyboardButton("Фото", callback_data="edit_field_photo")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_edit_menu")]
+        ]
+        await query.edit_message_text("Что изменить в этом варианте?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return EDIT_SELECT_VARIANT_FIELD
     
-    await update.message.reply_text(
-    "ID товара сохранён. Нажмите кнопку ниже для перехода к редактированию.",
-    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✏️ Редактировать товар", callback_data="admin_edit_product")]])
-)
-    return ConversationHandler.END
+    return EDIT_AWAIT_ACTION
 
 async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category_id = update.message.text.strip()
@@ -1920,173 +1754,105 @@ async def admin_subcat_await_id(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 
-async def add_product_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = context.user_data.get("state")
-    user_id = update.effective_user.id
-    message_text = update.message.text
-
-    print(f"[DEBUG] User {user_id} entered text: {message_text}")
-    print(f"[DEBUG] Current user_data state: {state}")
-
-    if state == "get_product_name":
-        return await get_name(update, context)
-
-    elif state == "get_new_category_name":
-        return await get_new_category_name(update, context)
-
-    elif state == "get_new_subcategory_name":
-        return await get_new_subcategory_name(update, context)
-
-    elif state == "get_new_brand_name":
-        return await get_new_brand_name(update, context)
-
-    elif state == "get_description":
-        return await get_description(update, context)
-
-    elif state == "get_new_size_name":
-        return await get_new_size_name(update, context)
-
-    elif state == "get_new_color_name":
-        return await get_new_color_name(update, context)
-
-    elif state == "get_variant_price":
-        return await get_variant_price(update, context)
-
-    elif state == "get_variant_quantity":
-        return await get_variant_quantity(update, context)
-
-    
 
 
 
-async def add_product_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = context.user_data.get("state")
-    data = update.callback_query.data
-    await update.callback_query.answer()
 
-    if data.startswith("add_cat_"):
-        return await get_category(update, context)
+# =================================================================
+# === СОЗДАНИЕ HANDLERS ===
+# =================================================================
 
-    elif data.startswith("add_subcat_"):
-        return await get_subcategory(update, context)
-
-    elif data.startswith("add_brand_"):
-        return await get_brand(update, context)
-
-    elif data.startswith("add_size_"):
-        return await select_variant_size(update, context)
-
-    elif data.startswith("add_color_"):
-        return await select_variant_color(update, context)
-
-    elif data == "add_more_variants" or data == "finish_add_product":
-        return await ask_add_more_variants(update, context)
-
-    else:
-        await update.callback_query.answer("⚠️ Неизвестная команда", show_alert=True)
-
-
-
-async def add_product_media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("[DEBUG] add_product_media_handler triggered — state:", context.user_data.get("state"))
-    state = context.user_data.get("state")
-    if state == "add_variant_media":
-        return await add_media(update, context)
-    else:
-        # Игнорируем, если не в состоянии ожидания медиа
-        return
+add_product_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(start_add_product, pattern="^admin_add_new_product$")],
+    states={
+        ADD_GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+        ADD_GET_CATEGORY: [CallbackQueryHandler(get_category, pattern="^cat_")],
+        ADD_GET_NEW_CATEGORY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_category_name)],
+        ADD_GET_SUBCATEGORY: [CallbackQueryHandler(get_subcategory, pattern="^subcat_")],
+        ADD_GET_NEW_SUBCATEGORY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_subcategory_name)],
+        ADD_GET_BRAND: [CallbackQueryHandler(get_brand, pattern="^brand_")],
+        ADD_GET_NEW_BRAND_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_brand_name)],
+        ADD_GET_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
+        ADD_GET_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern="^size_")],
+        ADD_GET_NEW_SIZE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name)],
+        ADD_GET_VARIANT_COLOR: [CallbackQueryHandler(get_variant_color, pattern="^color_")],
+        ADD_GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
+        ADD_GET_VARIANT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price)],
+        ADD_GET_VARIANT_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity)],
+        ADD_GET_VARIANT_MEDIA: [
+            MessageHandler(filters.PHOTO | filters.VIDEO, add_media),
+            CommandHandler('done', finish_media)
+        ],
+        ADD_ASK_ADD_MORE_VARIANTS: [CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")]
+    },
+    fallbacks=[
+        
+        CommandHandler("cancel", cancel_dialog)
+        ],
+    per_user=True,
+    per_chat=True,
+    persistent=True, 
+    name="add_product_conversation" , 
+    allow_reentry=True
+)
 
 
 
 
 
-
-# === ConversationHandlers ===
-
-admin_menu_convhandler = ConversationHandler(
+# ЕДИНЫЙ обработчик для всей админ-панели и редактирования
+admin_conv = ConversationHandler(
     entry_points=[CommandHandler("admin", admin_menu_entry)],
     states={
         ADMIN_MENU_AWAIT: [
-            CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_"),
+            CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_")
         ],
-        ADMIN_EDIT_AWAIT_ID: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_await_id),
+        ADMIN_AWAIT_EDIT_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_await_edit_id)
         ],
-        ADMIN_SUBCAT_AWAIT_ID: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id),
-        ],
-    },
-    fallbacks=[
-        MessageHandler(filters.COMMAND, cancel_dialog),
-        CallbackQueryHandler(cancel_dialog, pattern="^cancel_dialog$")  # на всякий случай
-    ],
-    per_user=True,
-    per_chat=True,
-    
-)
-
-edit_product_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_edit_product, pattern=r"^admin_edit_product$")],
-    states={
-        AWAIT_EDIT_ACTION: [
-            CallbackQueryHandler(handle_edit_action),
-            
-        ],
-            
-        
-        CONFIRM_DELETE_VARIANT: [
-            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
-        ],
-        CONFIRM_DELETE_FULL_PRODUCT: [
-            CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
-        ],
-        SELECT_VARIANT_FIELD: [
-            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_"),
-            CallbackQueryHandler(handle_edit_action),  # fallback на всякий
-        ],
-        GET_NEW_VARIANT_VALUE: [
-            MessageHandler(filters.TEXT | filters.PHOTO, get_new_variant_value),
+        EDIT_AWAIT_ACTION: [
             CallbackQueryHandler(handle_edit_action)
         ],
-        SELECT_VARIANT_SIZE: [
-            CallbackQueryHandler(select_variant_size, pattern=r"^add_size_"),
+        EDIT_CONFIRM_DELETE_VARIANT: [
+            CallbackQueryHandler(confirm_variant_delete, pattern=r"^confirm_delete_variant$|^cancel_delete$"),
         ],
-        GET_NEW_SIZE_NAME: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name),
+
+        EDIT_CONFIRM_DELETE_FULL_PRODUCT: [
+            CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
         ],
-        SELECT_VARIANT_COLOR: [
-            CallbackQueryHandler(select_variant_color, pattern=r"^add_color_"),
+        EDIT_SELECT_VARIANT_FIELD: [
+            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_|^back_to_edit_menu$")
         ],
-        GET_NEW_COLOR_NAME: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name),
+        EDIT_GET_NEW_VARIANT_VALUE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_variant_value)
         ],
-        GET_VARIANT_PRICE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price),
-        ],
-        GET_VARIANT_QUANTITY: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity),
-        ],
-        GET_VARIANT_PHOTO: [
+        # Состояния для добавления медиа во время редактирования
+        EDIT_ADD_VARIANT_MEDIA: [
             MessageHandler(filters.PHOTO | filters.VIDEO, add_media),
-            MessageHandler(filters.COMMAND, finish_media)
+            CommandHandler('done', finish_media) 
         ],
-        ASK_ADD_MORE_VARIANTS: [
-            CallbackQueryHandler(ask_add_more_variants, pattern=r"^add_more_variants$|^finish_add_product$"),
-            
+        # Состояния для добавления нового варианта ВНУТРИ редактирования
+        EDIT_ADD_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern="^size_")],
+        EDIT_GET_NEW_SIZE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name)],
+        EDIT_ADD_VARIANT_COLOR: [CallbackQueryHandler(get_variant_color, pattern="^color_")],
+        EDIT_GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
+        EDIT_ADD_VARIANT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_price)],
+        EDIT_ADD_VARIANT_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_variant_quantity)],
+        EDIT_ASK_ADD_MORE: [
+            CallbackQueryHandler(ask_add_more_variants, pattern="^add_more_variants$|^finish_add_product$")
         ],
-
-      
-
-        
+        ADMIN_AWAIT_SUBCAT_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_subcat_await_id)
+        ],
     },
     fallbacks=[
-        MessageHandler(filters.COMMAND, cancel_dialog),
-        CallbackQueryHandler(cancel_dialog, pattern=r"^cancel_dialog$")  # про запас
-    ],
-    per_user=True,
-    per_chat=True,
+        CommandHandler("cancel", cancel_dialog)
+              ],
+    persistent=True, name="admin_panel_conversation",
+    allow_reentry=True
     
 )
+
 
 subcat_rename_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_rename_subcat, pattern=r"^subcat_rename_\d+$")],
@@ -2095,7 +1861,10 @@ subcat_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_subcat),
         ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_subcat)],
+    fallbacks=[
+        
+        MessageHandler(filters.COMMAND, cancel_rename_subcat)
+        ],
     per_user=True,
     per_chat=True
 )
@@ -2107,37 +1876,30 @@ brand_rename_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, finish_rename_brand),
         ],
     },
-    fallbacks=[MessageHandler(filters.COMMAND, cancel_rename_brand)],
+    fallbacks=[
+        
+        MessageHandler(filters.COMMAND, cancel_rename_brand)
+        ],
     per_user=True,
     per_chat=True,
-    
 )
 
 # === Одиночные CallbackHandlers ===
-
 cat_manage_handler = CallbackQueryHandler(
     handle_cat_manage,
     pattern=r"^cat_delete_\d+$|^cat_delete_confirm_\d+$|^cat_delete_cancel$"
 )
-
 subcat_manage_handler = CallbackQueryHandler(
     handle_subcat_manage,
     pattern=r"^subcat_(delete|manage)_\d+$|^subcat_delete_confirm_\d+$|^subcat_delete_cancel$"
 )
-
 brand_manage_handler = CallbackQueryHandler(
     handle_brand_manage,
     pattern=r"^brand_(delete|manage)_\d+$|^brand_delete_confirm_\d+$|^brand_delete_cancel$"
 )
-
 cat_rename_text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, category_rename_text)
-
 # === Админские действия ===
-
 report_handler = CallbackQueryHandler(report_combined, pattern=r"^admin_report$")
 orders_report_handler = CallbackQueryHandler(ask_orders_report_period, pattern=r"^admin_orders_report$")
 orders_report_period_handler = CallbackQueryHandler(handle_orders_report_period, pattern=r"^orders_report_(today|3days|7days|30days)$")
-admin_decision_handler = CallbackQueryHandler(handle_admin_decision, pattern=r"^admin_(confirm|reject)_\d+$")
-nazad_to_admin_menu_handler = CallbackQueryHandler(nazad_to_admin_menu, pattern=r"^admin_menu$")
-
-
+admin_decision_handler = CallbackQueryHandler(admin_decision, pattern=r"^(admin_confirm|admin_reject|admin_reject_after_confirm)_\d+$")
