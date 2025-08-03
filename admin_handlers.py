@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import aiohttp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup , CallbackQuery
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup , CallbackQuery,InputMediaPhoto
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from telegram.constants import ParseMode
 import asyncio
@@ -1698,6 +1698,65 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
+
+
+async def handle_edit_photo_nav(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    direction = query.data.split('_')[-1] # 'prev' немесе 'next'
+
+    photos = context.user_data.get('edit_photos', [])
+    if not photos:
+        return EDIT_SELECT_VARIANT_FIELD # Егер фотолар жоқ болса, ештеңе істемейміз
+
+    current_index = context.user_data.get('edit_photo_index', 0)
+    total_photos = len(photos)
+
+    if direction == 'next':
+        new_index = (current_index + 1) % total_photos
+    else: # prev
+        new_index = (current_index - 1 + total_photos) % total_photos
+
+    context.user_data['edit_photo_index'] = new_index
+
+    # Вариант туралы ақпаратты қайта аламыз (caption жаңарту үшін)
+    variant_id = context.user_data.get('variant_to_edit_id')
+    variant_details = await fetchone("...", (variant_id,)) # ... орнына өз запросыңды қой
+
+    # Caption-ды жаңартамыз
+    caption = (
+        f"✏️ Редактирование варианта:\n\n"
+        f"<b>Размер:</b> {variant_details['size_name']}\n"
+        f"<b>Цвет:</b> {variant_details['color_name']}\n"
+        f"<b>Цена:</b> {variant_details['price']} ₸ | <b>Кол-во:</b> {variant_details['quantity']} шт.\n\n"
+        f"Фото {new_index + 1}/{total_photos}"
+    )
+
+    # Клавиатураны жаңартамыз
+    keyboard_rows = [
+        [
+            InlineKeyboardButton("◀️", callback_data=f"edit_photo_nav_prev"),
+            InlineKeyboardButton(f"{new_index + 1}/{total_photos}", callback_data="noop"),
+            InlineKeyboardButton("▶️", callback_data=f"edit_photo_nav_next")
+        ],
+        [InlineKeyboardButton("Цену", callback_data="edit_field_price")],
+        [InlineKeyboardButton("Количество", callback_data="edit_field_quantity")],
+        [InlineKeyboardButton("Фото", callback_data="edit_field_photo")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_edit_menu")]
+    ]
+
+    # edit_message_media арқылы суретті ауыстырамыз
+    await query.edit_message_media(
+        media=InputMediaPhoto(media=photos[new_index], caption=caption, parse_mode='HTML'),
+        reply_markup=InlineKeyboardMarkup(keyboard_rows)
+    )
+
+    return EDIT_SELECT_VARIANT_FIELD
+
+
+
+
 async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обрабатывает нажатия в главном меню редактирования."""
     query = update.callback_query
@@ -1729,14 +1788,69 @@ async def handle_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return EDIT_ADD_VARIANT_SIZE
 
     elif data.startswith("edit_variant_menu_"):
-        context.user_data['variant_to_edit_id'] = int(data.split('_')[3])
-        keyboard = [
+        variant_id = int(data.split('_')[3])
+        context.user_data['variant_to_edit_id'] = variant_id
+
+        photos = await fetchall("SELECT file_id FROM product_media WHERE variant_id = ? ORDER BY \"order\"", (variant_id,))
+
+        # 1. Базадан вариант туралы толық ақпарат аламыз
+        variant_details = await fetchone("""
+            SELECT pv.price, pv.quantity, s.name as size_name, c.name as color_name
+            FROM product_variants pv
+            LEFT JOIN sizes s ON pv.size_id = s.id
+            LEFT JOIN colors c ON pv.color_id = c.id
+            WHERE pv.id = ?
+        """, (variant_id,))
+
+
+        
+
+        if not variant_details:
+            await query.edit_message_text("❌ Ошибка: вариант не найден.")
+            return EDIT_AWAIT_ACTION 
+
+        # 2. Пагинация үшін деректерді сақтаймыз
+        context.user_data['edit_photos'] = [p['file_id'] for p in photos]
+        context.user_data['edit_photo_index'] = 0
+
+        file_id = photos[0]['file_id']
+        total_photos = len(photos)
+
+        # 3. Админге арналған ақпараттық текст құрастырамыз
+        caption = (
+            f"✏️ Редактирование варианта:\n\n"
+            f"<b>Размер:</b> {variant_details['size_name']}\n"
+            f"<b>Цвет:</b> {variant_details['color_name']}\n"
+            f"<b>Цена:</b> {variant_details['price']} ₸ | <b>Кол-во:</b> {variant_details['quantity']} шт.\n\n"
+            f"Фото {1}/{total_photos}"
+        )
+
+        # 4. Жаңа клавиатура жасаймыз (пагинациямен бірге)
+        keyboard_rows = []
+        if total_photos > 1:
+            keyboard_rows.append([
+                InlineKeyboardButton("◀️", callback_data=f"edit_photo_nav_prev"),
+                InlineKeyboardButton(f"1/{total_photos}", callback_data="noop"),
+                InlineKeyboardButton("▶️", callback_data=f"edit_photo_nav_next")
+            ])
+
+        keyboard_rows.extend([
             [InlineKeyboardButton("Цену", callback_data="edit_field_price")],
             [InlineKeyboardButton("Количество", callback_data="edit_field_quantity")],
             [InlineKeyboardButton("Фото", callback_data="edit_field_photo")],
             [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_edit_menu")]
-        ]
-        await query.edit_message_text("Что изменить в этом варианте?", reply_markup=InlineKeyboardMarkup(keyboard))
+        ])
+
+        # 5. Ескі хабарламаны өшіріп, жаңасын (суретпен) жібереміз
+        await query.message.delete()
+        await context.bot.send_photo(
+            chat_id=query.message.chat_id,
+            photo=file_id,
+            caption=caption,
+            reply_markup=InlineKeyboardMarkup(keyboard_rows),
+            parse_mode='HTML'
+        )
+
         return EDIT_SELECT_VARIANT_FIELD
     
     return EDIT_AWAIT_ACTION
@@ -1821,7 +1935,8 @@ admin_conv = ConversationHandler(
             CallbackQueryHandler(confirm_full_product_delete, pattern=r"^confirm_delete_full$|^cancel_delete$"),
         ],
         EDIT_SELECT_VARIANT_FIELD: [
-            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_|^back_to_edit_menu$")
+            CallbackQueryHandler(select_variant_field_to_edit, pattern=r"^edit_field_|^back_to_edit_menu$"),
+            CallbackQueryHandler(handle_edit_photo_nav, pattern=r"^edit_photo_nav_")
         ],
         EDIT_GET_NEW_VARIANT_VALUE: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_variant_value)
