@@ -11,6 +11,19 @@ from db import fetchall, fetchone, execute
 import pytz
 from datetime import datetime
 from functools import wraps
+import random
+import string
+
+
+
+
+async def generate_unique_sku(length=4):
+    """Уникалды 4-сандық артикул генерациялайды."""
+    while True:
+        sku = ''.join(random.choices(string.digits, k=length))
+        existing_sku = await fetchone("SELECT sku FROM products WHERE sku = ?", (sku,))
+        if not existing_sku:
+            return sku
 
 
 def cleanup_before_entry(func):
@@ -262,15 +275,32 @@ async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
     product_row = await fetchone("SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1", (data['product_name'],))
     context.user_data['product_id'] = product_row['id']
-    await update.message.reply_text(f"✅ Основной товар '{data['product_name']}' создан.\n\nТеперь добавим первый вариант.")
+
+    # 3. Уникалды артикул генерациялаймыз
+    sku = await generate_unique_sku()
+
+    # 4. Базаны жаңартып, артикулды сақтаймыз
+    await execute("UPDATE products SET sku = ? WHERE id = ?", (sku, product_row['id']))
+
+    await update.message.reply_text(
+        f"✅ Основной товар '{data['product_name']}' создан.\n"
+        f"Его уникальный артикул: <pre>{sku}</pre>\n\n"
+        f"Теперь добавим первый вариант.",
+        parse_mode="HTML"
+    )
+
     await ask_for_variant_size(update, context)
     return ADD_GET_VARIANT_SIZE
 
-# --- Функции для добавления вариантов ---
 async def ask_for_variant_size(update, context):
+    """Админнен размер сұрайды, бірақ "Пропустить" кнопкасын қосады."""
     sizes = await fetchall("SELECT * FROM sizes")
     keyboard = [[InlineKeyboardButton(s['name'], callback_data=f"size_{s['id']}")] for s in sizes]
     keyboard.append([InlineKeyboardButton("➕ Новый размер", callback_data="size_new")])
+    
+    # === МІНЕ, ЖАҢА КНОПКА ОСЫ ЖЕРДЕ ҚОСЫЛДЫ ===
+    keyboard.append([InlineKeyboardButton("➡️ Пропустить (для товаров без размера)", callback_data="size_skip")])
+    
     msg = "Добавление варианта. Шаг 1: Выберите размер:"
     if update.callback_query:
         await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -278,18 +308,35 @@ async def ask_for_variant_size(update, context):
         await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def get_variant_size(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Админнің размер таңдауын немесе 'Пропустить' басқанын өңдейді."""
     query = update.callback_query
     await query.answer()
+
+    # === МІНЕ, ЖАҢА ЛОГИКА ОСЫ ЖЕРДЕ ҚОСЫЛДЫ ===
+    if query.data == "size_skip":
+        # Егер админ "Пропустить" десе, размер ID-ын None деп белгілейміз
+        context.user_data['variant_size_id'] = None 
+        logging.info("Размер таңдау қадамы өткізілді.")
+        # Бірден келесі қадамға - түс таңдауға өтеміз
+        await ask_for_variant_color(update, context)
+        # Редакциялау режиміне сәйкес келесі күйді қайтарамыз
+        if context.user_data.get("mode") == "edit":
+            return EDIT_ADD_VARIANT_COLOR
+        return ADD_GET_VARIANT_COLOR
+    # === ЖАҢА ЛОГИКАНЫҢ СОҢЫ ===
+
     if query.data == "size_new":
         await query.edit_message_text("Введите новое значение размера:")
         if context.user_data.get("mode") == "edit":
             return EDIT_GET_NEW_SIZE_NAME
         return ADD_GET_NEW_SIZE_NAME
+        
     context.user_data['variant_size_id'] = int(query.data.split('_')[1])
     await ask_for_variant_color(update, context)
     if context.user_data.get("mode") == "edit":
         return EDIT_ADD_VARIANT_COLOR
     return ADD_GET_VARIANT_COLOR
+
 
 async def get_new_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     size_id = await create_new_entity(update.message.text, 'sizes')
@@ -347,25 +394,40 @@ async def get_variant_price(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return ADD_GET_VARIANT_PRICE
 
 async def get_variant_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Вариантты базаға сақтайды, size_id-ның None болу мүмкіндігін ескереді."""
     try:
         context.user_data['variant_quantity'] = int(update.message.text)
         data = context.user_data
-        # Сохраняем вариант в БД
+        
+        # === МІНЕ, ЖАҢАРТЫЛҒАН ЖЕР ОСЫ ===
+        # variant_size_id None болуы мүмкін, база данных мұны NULL ретінде қабылдауы керек
         await execute(
             "INSERT INTO product_variants (product_id, size_id, color_id, price, quantity) VALUES (?, ?, ?, ?, ?)",
-            (data['product_id'], data['variant_size_id'], data['variant_color_id'], data['variant_price'], data['variant_quantity'])
+            (data['product_id'], data.get('variant_size_id'), data['variant_color_id'], data['variant_price'], data['variant_quantity'])
         )
-        variant_row = await fetchone(
-            "SELECT id FROM product_variants WHERE product_id=? AND size_id=? AND color_id=? ORDER BY id DESC LIMIT 1",
-            (data['product_id'], data['variant_size_id'], data['variant_color_id'])
-        )
+        # === ЖАҢАРТУДЫҢ СОҢЫ ===
+        
+        # Вариантты табу логикасы да сәл өзгереді
+        if data.get('variant_size_id'):
+            variant_row = await fetchone(
+                "SELECT id FROM product_variants WHERE product_id=? AND size_id=? AND color_id=? ORDER BY id DESC LIMIT 1",
+                (data['product_id'], data['variant_size_id'], data['variant_color_id'])
+            )
+        else: # Егер размер болмаса
+            variant_row = await fetchone(
+                "SELECT id FROM product_variants WHERE product_id=? AND color_id=? AND size_id IS NULL ORDER BY id DESC LIMIT 1",
+                (data['product_id'], data['variant_color_id'])
+            )
+
         context.user_data['current_variant_id'] = variant_row['id']
         context.user_data['media_order'] = 0
         await update.message.reply_text("Вариант сохранен. Теперь отправьте от 1 до 5 фото/видео для этого варианта. Когда закончите, напишите /done.")
+        
         if context.user_data.get("mode") == "edit":
             return EDIT_ADD_VARIANT_MEDIA
         else:
             return ADD_GET_VARIANT_MEDIA
+            
     except ValueError:
         await update.message.reply_text("Неверный формат. Введите количество как целое число.")
         if context.user_data.get("mode") == "edit":
@@ -482,7 +544,7 @@ async def finish_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         [InlineKeyboardButton("✅ Нет, завершить", callback_data="finish_add_product")]
     ]
     await update.message.reply_text(
-        "✅ Вариант успешно добавлен. Хотите добавить еще один?",
+        f"✅ Вариант успешно добавлен.Хотите добавить еще один?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     if context.user_data.get("mode") == "edit":
@@ -546,28 +608,44 @@ async def confirm_full_product_delete(update: Update, context: ContextTypes.DEFA
         await show_edit_menu(update, context)
         return EDIT_AWAIT_ACTION
 
+
+
 async def select_variant_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     data = query.data
 
     if data == "back_to_edit_menu":
-        await show_edit_menu(update, context)
+        # Суреті бар хабарламаны өшіреміз
+        await query.message.delete() 
+        # Сосын негізгі редакциялау менюін ЖАҢА ХАБАРЛАМАМЕН жібереміз
+        await show_edit_menu(update, context, send_new=True)
         return EDIT_AWAIT_ACTION
 
-    field_to_edit = data.split('_')[2] # edit_field_price -> price
+    field_to_edit = data.split('_')[2]
     context.user_data['field_to_edit'] = field_to_edit
-    
+
+    prompt = ""
+    next_state = EDIT_GET_NEW_VARIANT_VALUE
+
     if field_to_edit == "photo":
-        # Для редактирования фото мы можем переиспользовать логику добавления
         context.user_data['current_variant_id'] = context.user_data.get('variant_to_edit_id')
         context.user_data['media_order'] = 0
-        await query.edit_message_text("Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done.")
-        return EDIT_ADD_VARIANT_MEDIA 
-        
-    prompt = f"Введите новое значение для поля '{field_to_edit}':"
-    await query.edit_message_text(prompt)
-    return EDIT_GET_NEW_VARIANT_VALUE
+        prompt = "Пришлите новые фото или видео для этого варианта. Когда закончите — напишите /done."
+        next_state = EDIT_ADD_VARIANT_MEDIA 
+    else:
+        prompt = f"Введите новое значение для поля '{field_to_edit}':"
+
+    # Суреті бар ескі хабарламаны өшіреміз
+    await query.message.delete()
+    # Орнына жаңа, тексттік хабарлама жібереміз
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=prompt
+    )
+
+    return next_state
+
 
 async def get_new_variant_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     field = context.user_data.get('field_to_edit')
@@ -1609,7 +1687,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Эти команды переводят диалог в новое состояние
     elif data == "admin_edit_product":
             context.user_data["mode"] = "edit"
-            await query.edit_message_text("Введите ID товара для редактирования:")
+            await query.edit_message_text("Введите артикул(код) товара для редактирования:")
             return ADMIN_AWAIT_EDIT_ID
             
     elif data == "admin_manage_subcategories":
@@ -1619,32 +1697,44 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ADMIN_MENU_AWAIT
 
 async def admin_await_edit_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Получает ID товара и переходит в меню редактирования."""
-    product_id = update.message.text.strip()
-    if not product_id.isdigit():
-    
-        await update.message.reply_text("Некорректный ID. Попробуйте ещё раз.")
-        return ADMIN_AWAIT_EDIT_ID
-    product = await fetchone("SELECT id FROM products WHERE id = ?", (int(product_id),))
+    """Получает АРТИКУЛ товара и переходит в меню редактирования."""
+    sku = update.message.text.strip()
+
+    # Артикул бойынша базадан тауарды іздейміз
+    product = await fetchone("SELECT id FROM products WHERE sku = ?", (sku,))
+
     if not product:
-        await update.message.reply_text(f"Товар с ID {product_id} не найден. Попробуйте снова.")
+        await update.message.reply_text(f"❌ Товар с артикулом '{sku}' не найден. Попробуйте снова.")
+        # Сол күйде қаламыз, жаңа артикул күтіп
         return ADMIN_AWAIT_EDIT_ID
 
-    context.user_data['product_to_edit_id'] = int(product_id)
+    # Табылған тауардың ID-ын келесі қадамдар үшін сақтаймыз
+    context.user_data['product_to_edit_id'] = product['id']
+
+    # Редакциялау менюін көрсетеміз
     await show_edit_menu(update, context)
+
+    # Келесі күйге өтеміз
     return EDIT_AWAIT_ACTION
 
 
-async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send_new=False):
     """Показывает главное меню редактирования с вариантами."""
     product_id = context.user_data.get('product_to_edit_id')
+
     product = await fetchone("""
-    SELECT p.*, b.name as brand_name 
-    FROM products p 
-    JOIN brands b ON p.brand_id = b.id 
-    WHERE p.id = ?
-""", (product_id,))
-    
+        SELECT p.*, b.name as brand_name 
+        FROM products p 
+        JOIN brands b ON p.brand_id = b.id 
+        WHERE p.id = ?
+    """, (product_id,))
+
+    if not product:
+        # Егер тауар табылмаса, қате туралы хабарлаймыз
+        chat_id = update.effective_chat.id
+        await context.bot.send_message(chat_id, "❌ Ошибка: не удалось найти товар для редактирования.")
+        return EDIT_AWAIT_ACTION 
+
     variants = await fetchall("""
         SELECT pv.id, pv.price, pv.quantity, s.name as size_name, c.name as color_name
         FROM product_variants pv
@@ -1653,7 +1743,8 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE pv.product_id = ?
     """, (product_id,))
 
-    message_text = f"⚙️ Редактирование <b>{product['name']}</b> \nБренд:{product['brand_name']}\n(Артикул: {product['sku']})\n\nВыберите действие:"
+    message_text = f"⚙️ Редактирование <b>{product['name']}</b>\nБренд: {product['brand_name']}\n(Артикул: {product['sku']})\n\nВыберите действие:"
+
     keyboard = [[InlineKeyboardButton("✏️ Общая информация", callback_data=f"edit_general_{product_id}")]]
     if variants:
         keyboard.append([InlineKeyboardButton("--- Варианты товара ---", callback_data="noop")])
@@ -1667,10 +1758,33 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("❌ Удалить товар ПОЛНОСТЬЮ", callback_data=f"delete_product_full_{product_id}")])
     keyboard.append([InlineKeyboardButton("⬅️ Назад в админ-меню", callback_data="back_to_admin_menu")])
 
-    if update.callback_query:
-        await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Егер send_new=True болса (яғни, "Назад" кнопкасынан келсе), жаңа хабарлама жібереміз
+    if send_new:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=message_text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML
+        )
+    # Басқа жағдайда, ескісін өзгертеміз
     else:
-        await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+        query = update.callback_query
+        if query and query.message:
+             await query.edit_message_text(
+                 text=message_text, 
+                 reply_markup=reply_markup, 
+                 parse_mode=ParseMode.HTML
+             )
+        elif update.message:
+             await update.message.reply_text(
+                 text=message_text, 
+                 reply_markup=reply_markup, 
+                 parse_mode=ParseMode.HTML
+             )
+
+            
 
 
 async def handle_edit_photo_nav(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1695,7 +1809,13 @@ async def handle_edit_photo_nav(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Вариант туралы ақпаратты қайта аламыз (caption жаңарту үшін)
     variant_id = context.user_data.get('variant_to_edit_id')
-    variant_details = await fetchone("...", (variant_id,)) # ... орнына өз запросыңды қой
+    variant_details = await fetchone("""
+        SELECT pv.price, pv.quantity, s.name as size_name, c.name as color_name
+        FROM product_variants pv
+        LEFT JOIN sizes s ON pv.size_id = s.id
+        LEFT JOIN colors c ON pv.color_id = c.id
+        WHERE pv.id = ?
+    """, (variant_id,))
 
     # Caption-ды жаңартамыз
     caption = (
@@ -1860,7 +1980,7 @@ add_product_conv = ConversationHandler(
         ADD_GET_BRAND: [CallbackQueryHandler(get_brand, pattern="^brand_")],
         ADD_GET_NEW_BRAND_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_brand_name)],
         ADD_GET_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
-        ADD_GET_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern="^size_")],
+        ADD_GET_VARIANT_SIZE: [CallbackQueryHandler(get_variant_size, pattern=r"^(size_skip|size_new|size_\d+)$")],
         ADD_GET_NEW_SIZE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_size_name)],
         ADD_GET_VARIANT_COLOR: [CallbackQueryHandler(get_variant_color, pattern="^color_")],
         ADD_GET_NEW_COLOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_new_color_name)],
