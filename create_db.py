@@ -60,6 +60,10 @@ async def main():
             FOREIGN KEY (brand_id) REFERENCES brands (id)
         )
         ''')
+        # Дополнительно создаем уникальный индекс для sku для надежности
+        await db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_products_sku ON products (sku)
+        """)
         print("Таблица 'products' создана.")
 
         await db.execute('''
