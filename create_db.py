@@ -52,6 +52,7 @@ async def main():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
+            sku TEXT,
             category_id INTEGER,
             sub_category_id INTEGER,
             brand_id INTEGER,
