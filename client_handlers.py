@@ -1134,30 +1134,34 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     address = context.user_data["checkout_address"]
     phone = context.user_data["checkout_phone"]
     cart = context.user_data.get("cart", {})
-    brand = context.user_data.get("current_brand_id", 1)  # Подставляем 1, если бренд не указан
-    if not isinstance(cart, dict):
-        cart = {}
+    
+    if not isinstance(cart, dict) or not cart:
+        await update.message.reply_text(md2("Ваша корзина пуста."), parse_mode="MarkdownV2")
+        return ConversationHandler.END
+
     cart_json = json.dumps(cart, ensure_ascii=False)
     total_price = sum(item['price'] * item['quantity'] for item in cart.values())
+    
     try:
-        created_at_utc = datetime.now(timezone.utc).isoformat()
+        # --- ТҮЗЕТІЛГЕН SQL-ЗАПРОС ---
+        # `brand` деген бағананы алып тастадық
         order_id = await execute(
-    "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, brand, total_price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    (user_id, name, address, phone, cart_json, brand, total_price, 'pending_payment', created_at_utc)
-)
-
+            "INSERT INTO orders (user_id, user_name, user_address, user_phone, cart, total_price, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, name, address, phone, cart_json, total_price, 'pending_payment')
+        )
+        # --- ТҮЗЕТУДІҢ СОҢЫ ---
 
     except Exception as e:
-        print(f"Ошибка при сохранении заказа в БД: {e}")
-        await update.message.reply_text(md2("Произошла ошибка."), parse_mode="MarkdownV2")
+        print(f"❌ Ошибка при сохранении заказа в БД: {e}")
+        await update.message.reply_text(md2("Произошла ошибка при оформлении заказа."), parse_mode="MarkdownV2")
         return ConversationHandler.END
     
-     # --- Формируем чек ---
+    # --- Чекті құрастыру ---
     cart_lines = []
     for item in cart.values():
         cart_lines.append(f"{item['name']} x{item['quantity']} = {item['price']*item['quantity']}₸\nБренд: {item.get('brand', 'Не указано')}")
     cart_text = "\n".join(cart_lines)
-    brands = ", ".join(set(item.get("brand", "Не указано") for item in cart.values()))
+    
     receipt_text = (
         f"🧾 <b>Ваш чек №{order_id}</b>\n\n"
         f"<b>Имя:</b> {name}\n"
@@ -1166,27 +1170,28 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<b>Товары:</b>\n{cart_text}\n\n"
         f"<b>Итого:</b> {total_price}₸"
     )
+    await update.message.reply_text(receipt_text, parse_mode=ParseMode.HTML)
 
-
-    await update.message.reply_text(receipt_text, parse_mode="HTML")
-
-    
-    kaspi_link = "https://pay.kaspi.kz/pay/f9ja8t7g"
+    # --- Kaspi-ге сілтеме жіберу ---
+    kaspi_link = "https://pay.kaspi.kz/pay/f9ja8t7g" # Бұл сілтемені өзгерту керек болуы мүмкін
     message_text = (
-        f"{md2('✅ Ваш заказ')} *№{md2(order_id)}* {md2('почти готов')}\\!\n\n"
-        f"{md2('Сумма к оплате')}: *{md2(total_price)} ₸*\n\n"
+        f"{md2('✅ Ваш заказ')} *№{md2(str(order_id))}* {md2('почти готов')}!\n\n"
+        f"{md2('Сумма к оплате')}: *{md2(str(total_price))} ₸*\n\n"
         f"{md2('Пожалуйста, оплатите заказ по ссылке в Kaspi')}:\n👉 [Оплатить через Kaspi]({kaspi_link})\n\n"
-        f"*{md2('ВАЖНО')}:* {md2('В комментарии к платежу укажите номер заказа')}: `{md2(order_id)}`\n\n"
+        f"*{md2('ВАЖНО')}:* {md2('В комментарии к платежу укажите номер заказа')}: *{md2(str(order_id))}*\n\n"
         f"{md2('После оплаты вернитесь и нажмите кнопку ниже')}\\."
     )
-    keyboard = [[InlineKeyboardButton(f"{md2('✅ Оплатил')}", callback_data=f"paid_{order_id}")],
-                [InlineKeyboardButton(md2("❌ Отменить заказ"), callback_data=f"cancel_by_client_{order_id}")]
-                ]
+    keyboard = [
+        [InlineKeyboardButton("✅ Оплатил", callback_data=f"paid_{order_id}")],
+        [InlineKeyboardButton("❌ Отменить заказ", callback_data=f"cancel_by_client_{order_id}")]
+    ]
     await update.message.reply_text(
         message_text, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True
     )
+    
     context.user_data.pop('cart', None)
     return ConversationHandler.END
+
 
 
 async def cancel_by_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
