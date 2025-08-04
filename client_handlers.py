@@ -810,42 +810,58 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE, sub
     else:
         await show_product_slider(update, context, all_mode=False)
 
-async def add_item_to_cart(context : ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None ):
+        
+
+async def add_item_to_cart(context: ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None):
+    # --- ТҮЗЕТІЛГЕН SQL-ЗАПРОС ---
     variant = await fetchone("""
-        SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color , p.brand_id, b.name as brand
+        SELECT pv.id, pv.quantity, p.name, pv.price, s.name as size, c.name as color, p.brand_id, b.name as brand
         FROM product_variants pv
         JOIN products p ON pv.product_id = p.id
-        JOIN sizes s ON pv.size_id = s.id
+        LEFT JOIN sizes s ON pv.size_id = s.id 
         JOIN colors c ON pv.color_id = c.id
         JOIN brands b ON p.brand_id = b.id
         WHERE pv.id = ?
     """, (product_variant_id,))
+
     if not variant or variant['quantity'] <= 0:
-        msg = ("❌ Этот вариант товара закончился на складе.")
+        msg = "❌ Этот вариант товара закончился на складе."
         if query:
             await query.answer(msg, show_alert=True)
         else:
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+            await context.bot.send_message(chat_id=chat_id, text=msg)
         return False
+
     cart = context.user_data.setdefault('cart', {})
-    
     variant_id_str = str(product_variant_id)
     current_quantity = cart.get(variant_id_str, {}).get('quantity', 0)
+
     if current_quantity >= variant['quantity']:
-        msg = ("Вы уже добавили в корзину всё, что есть в наличии!")
+        msg = "Вы уже добавили в корзину всё, что есть в наличии!"
         if query:
             await query.answer(msg, show_alert=True)
         else:
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+            await context.bot.send_message(chat_id=chat_id, text=msg)
         return False
-    full_name = f"{variant['name']} ({variant['size']}, {variant['color']})"
+
+    # --- ТҮЗЕТІЛГЕН ТАУАР АТЫН ҚҰРАСТЫРУ ---
+    # Размердің бар-жоғын тексереміз
+    if variant['size']:
+        full_name = f"{variant['name']} ({variant['size']}, {variant['color']})"
+    else: # Егер размер болмаса
+        full_name = f"{variant['name']} ({variant['color']})"
+
     if variant_id_str in cart:
         cart[variant_id_str]['quantity'] += 1
     else:
-        cart[variant_id_str] = {'name': full_name, 'price': variant['price'], 'quantity': 1 , 'brand': variant['brand']}
+        cart[variant_id_str] = {
+            'name': full_name, 
+            'price': variant['price'], 
+            'quantity': 1, 
+            'brand': variant['brand']
+        }
+        
     return True
-
-
 
 async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE , edit=True):
     cart = context.user_data.setdefault('cart', {})
