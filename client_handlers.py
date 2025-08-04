@@ -627,12 +627,11 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_video = bool(media_rows[page]['is_video']) if total_media > 0 else False
 
     # =================================================================
-    # === МІНЕ, ЕҢ БАСТЫ ЛОГИКА ОСЫ ЖЕРДЕ ===
+    # === БАСТЫ ЛОГИКА ОСЫ ЖЕРДЕ ===
     # =================================================================
     
     # ЕГЕР РАЗМЕРЛЕР ТАБЫЛМАСА (бұл сағат немесе аксессуар)
     if not sizes:
-        # Бізге сол түстің жалғыз вариантын табу керек
         variant = await fetchone("""
             SELECT pv.*, c.name as color, b.name as brand, p.name as product_name, p.sku
             FROM product_variants pv
@@ -647,7 +646,6 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Бұл тауар қазір қолжетімсіз.")
             return
 
-        # Тауар карточкасының текстін құрастырамыз
         caption = (
             f"<b>{variant['product_name']}</b>\n\n"
             f"Бренд: {variant['brand']}\n"
@@ -658,7 +656,6 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Фото {page + 1}/{total_media}"
         )
 
-        # Клавиатураны құрастырамыз
         keyboard = []
         if total_media > 1:
             nav_buttons = []
@@ -678,7 +675,6 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ЕГЕР РАЗМЕРЛЕР БАР БОЛСА (бұл киім)
     else:
-        # Бәрі бұрынғыдай жұмыс істейді
         size_keyboard = [
             [InlineKeyboardButton(s['name'], callback_data=f"size_{product_id}_{color_id}_{s['id']}")] for s in sizes
         ]
@@ -701,19 +697,26 @@ async def choose_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not file_id:
         await query.edit_message_text(caption, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
     else:
-        media_to_send = InputMediaVideo(file_id) if is_video else InputMediaPhoto(file_id)
-        media_to_send.caption = caption
-        media_to_send.parse_mode = ParseMode.HTML
+        # --- ТҮЗЕТІЛГЕН ЖЕР ---
+        # Caption-ды объектіні құру кезінде бірден береміз
+        if is_video:
+            media_to_send = InputMediaVideo(media=file_id, caption=caption, parse_mode=ParseMode.HTML)
+        else:
+            media_to_send = InputMediaPhoto(media=file_id, caption=caption, parse_mode=ParseMode.HTML)
+        # --- ТҮЗЕТУДІҢ СОҢЫ ---
         
         try:
             await query.message.edit_media(media=media_to_send, reply_markup=reply_markup)
-        except Exception:
+        except Exception as e:
+            logging.error(f"edit_media қатесі: {e}")
             # Егер edit_media істемесе, өшіріп, жаңасын жібереміз
             await query.message.delete()
             if is_video:
                 await context.bot.send_video(query.message.chat_id, file_id, caption=caption, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
             else:
                 await context.bot.send_photo(query.message.chat_id, file_id, caption=caption, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+
+
 
 
 
