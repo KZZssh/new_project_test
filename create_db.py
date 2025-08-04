@@ -56,6 +56,7 @@ async def main():
             category_id INTEGER,
             sub_category_id INTEGER,
             brand_id INTEGER,
+            cover_url TEXT,
             FOREIGN KEY (category_id) REFERENCES categories (id),
             FOREIGN KEY (sub_category_id) REFERENCES sub_categories (id),
             FOREIGN KEY (brand_id) REFERENCES brands (id)
