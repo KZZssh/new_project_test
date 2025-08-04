@@ -1175,18 +1175,19 @@ async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- Kaspi-ге сілтеме жіберу ---
     kaspi_link = "https://pay.kaspi.kz/pay/f9ja8t7g" # Бұл сілтемені өзгерту керек болуы мүмкін
     message_text = (
-        f"{md2('✅ Ваш заказ')} *№{md2(str(order_id))}* {md2('почти готов')}!\n\n"
-        f"{md2('Сумма к оплате')}: *{md2(str(total_price))} ₸*\n\n"
-        f"{md2('Пожалуйста, оплатите заказ по ссылке в Kaspi')}:\n👉 [Оплатить через Kaspi]({kaspi_link})\n\n"
-        f"*{md2('ВАЖНО')}:* {md2('В комментарии к платежу укажите номер заказа')}: *{md2(str(order_id))}*\n\n"
-        f"{md2('После оплаты вернитесь и нажмите кнопку ниже')}\\."
+        f"✅ Ваш заказ <b>№{str(order_id)}</b> почти готов\n\n"
+        f"Сумма к оплате: <b><i>{ str(total_price)}тг</i></b> \n\n "
+        f"""Пожалуйста, оплатите заказ по ссылке в Kaspi:<br>
+👉 <a href="{kaspi_link}">Оплатить через Kaspi</a><br><br>"""
+        f"<b>ВАЖНО</b>: <i>В комментарии к платежу укажите номер заказа:</i> {str(order_id)}\n\n"
+        f"После оплаты вернитесь и нажмите кнопку ниже."
     )
     keyboard = [
         [InlineKeyboardButton("✅ Оплатил", callback_data=f"paid_{order_id}")],
         [InlineKeyboardButton("❌ Отменить заказ", callback_data=f"cancel_by_client_{order_id}")]
     ]
     await update.message.reply_text(
-        message_text, parse_mode="MarkdownV2", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True
+        message_text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True
     )
     
     context.user_data.pop('cart', None)
