@@ -1013,56 +1013,55 @@ async def cart_minus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("⚠️ Ошибка при отображении корзины после -:", e)
 
+        
+
 async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     chat_id = update.effective_chat.id
     product_variant_id = int(query.data.split("_")[1])
 
-    subcat_id = context.user_data.get('current_subcat_id')
-    brand_id = context.user_data.get('current_brand_id')
-
-    if not subcat_id or not brand_id:
-        product_info = await fetchone(
-            "SELECT p.sub_category_id, p.brand_id, sc.category_id "
-            "FROM product_variants pv "
-            "JOIN products p ON pv.product_id = p.id "
-            "JOIN sub_categories sc ON p.sub_category_id = sc.id "
-            "WHERE pv.id = ?",
-            (product_variant_id,)
-        )
-        if product_info:
-            subcat_id = product_info['sub_category_id']
-            brand_id = product_info['brand_id']
-            context.user_data['current_subcat_id'] = subcat_id
-            context.user_data['current_brand_id'] = brand_id
-            context.user_data['current_category_id'] = product_info['category_id']
-
-    context.user_data['current_subcat_id'] = subcat_id or 1
-    context.user_data['current_brand_id'] = brand_id or 1
-    context.user_data['current_category_id'] = context.user_data.get('current_category_id', 1)
-
-
-    slider_ctx = context.user_data.get('return_to_slider', {})
-    context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
-    context.user_data['all_mode'] = slider_ctx.get('all_mode', True)
-    context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id', subcat_id)
-    context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id', brand_id)
-    context.user_data['cart_return_source'] = "slider"
-
+    # 1. Тауарды корзинаға қосамыз (бұл функция сенде бар деп есептейміз)
+    # Ол сәтті қосылса True, қосылмаса False қайтаруы керек.
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
-    kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="cart")],
-          [InlineKeyboardButton("◀ Назад", callback_data="back_to_slider")]]
+    
+    if not result:
+        # Егер тауар қосылмаса (мысалы, складта бітіп қалса),
+        # add_item_to_cart функциясы өзі хабарлама жіберуі керек.
+        return
 
-    if result:
-        try:
-            await query.message.delete()
-        except Exception as e:
-            print("❌ Не удалось удалить сообщение:", e)
-        await context.bot.send_message(chat_id=chat_id, text="✅ Добавлено в корзину!" , reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+    # 2. Қайда қайту керектігін анықтаймыз
+    back_callback_data = ""
+    
+    # Егер слайдерден келсек
+    if 'return_to_slider' in context.user_data and context.user_data['return_to_slider']:
+        back_callback_data = "back_to_slider"
+        
+    # Егер размерсіз тауардың карточкасынан келсек
+    elif 'current_product_id' in context.user_data and 'chosen_color_id' in context.user_data:
+        product_id = context.user_data['current_product_id']
+        color_id = context.user_data['chosen_color_id']
+        # Түс таңдау менюіне қайтатын коллбэкті құрастырамыз
+        back_callback_data = f"color_{product_id}_{color_id}"
+    
+    # 3. Клавиатураны құрастырамыз
+    kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="cart")]]
+    if back_callback_data:
+        # "Назад" кнопкасының текстін қарапайым етіп, бірақ дұрыс жерге жібереміз
+        kb.append([InlineKeyboardButton("◀️ Назад", callback_data=back_callback_data)])
 
-        await asyncio.sleep(0.1)  # Небольшая задержка перед возвратом к слайдеру
+    # 4. Хабарламаны жібереміз
+    # Ескі хабарламаны (суреті бар) өшіріп, орнына жаңа тексттік хабарлама жібереміз.
+    try:
+        await query.message.delete()
+    except Exception as e:
+        logging.warning(f"Корзинаға қосқанда хабарламаны өшіру мүмкін болмады: {e}")
 
+    await context.bot.send_message(
+        chat_id=chat_id, 
+        text="✅ Добавлено в корзину!", 
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
         
 
 
