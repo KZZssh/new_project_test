@@ -1013,7 +1013,7 @@ async def cart_minus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("⚠️ Ошибка при отображении корзины после -:", e)
 
-        
+
 
 async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1021,37 +1021,38 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     chat_id = update.effective_chat.id
     product_variant_id = int(query.data.split("_")[1])
 
-    # 1. Тауарды корзинаға қосамыз (бұл функция сенде бар деп есептейміз)
-    # Ол сәтті қосылса True, қосылмаса False қайтаруы керек.
+    # 1. Тауарды корзинаға қосамыз
     result = await add_item_to_cart(context, product_variant_id, chat_id, query)
     
     if not result:
-        # Егер тауар қосылмаса (мысалы, складта бітіп қалса),
-        # add_item_to_cart функциясы өзі хабарлама жіберуі керек.
         return
 
-    # 2. Қайда қайту керектігін анықтаймыз
+    # 2. Қайда қайту керектігін анықтаймыз және САҚТАЙМЫЗ
     back_callback_data = ""
     
-    # Егер слайдерден келсек
-    if 'return_to_slider' in context.user_data and context.user_data['return_to_slider']:
-        back_callback_data = "back_to_slider"
-        
-    # Егер размерсіз тауардың карточкасынан келсек
-    elif 'current_product_id' in context.user_data and 'chosen_color_id' in context.user_data:
-        product_id = context.user_data['current_product_id']
-        color_id = context.user_data['chosen_color_id']
-        # Түс таңдау менюіне қайтатын коллбэкті құрастырамыз
-        back_callback_data = f"color_{product_id}_{color_id}"
+    product_id = context.user_data.get('current_product_id')
+    color_id = context.user_data.get('chosen_color_id')
+
+    if product_id and color_id:
+        # Егер размер таңдалған болса, артқа қайту жолы - размер таңдау беті
+        if 'chosen_size_id' in context.user_data:
+            back_callback_data = f"color_{product_id}_{color_id}"
+        # Егер размер таңдалмаған болса (размерсіз тауар), артқа қайту жолы - түс таңдау беті
+        else:
+            back_callback_data = f"details_{product_id}"
+    
+    # === МІНЕ, ЕҢ БАСТЫ ТҮЗЕТУ ОСЫ ЖЕРДЕ ===
+    # Қайда қайту керектігін корзинаның өзі үшін сақтап қоямыз
+    if back_callback_data:
+        context.user_data['cart_return_path'] = back_callback_data
+    # ==========================================
     
     # 3. Клавиатураны құрастырамыз
     kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="cart")]]
     if back_callback_data:
-        # "Назад" кнопкасының текстін қарапайым етіп, бірақ дұрыс жерге жібереміз
         kb.append([InlineKeyboardButton("◀️ Назад", callback_data=back_callback_data)])
 
     # 4. Хабарламаны жібереміз
-    # Ескі хабарламаны (суреті бар) өшіріп, орнына жаңа тексттік хабарлама жібереміз.
     try:
         await query.message.delete()
     except Exception as e:
