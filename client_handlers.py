@@ -810,7 +810,7 @@ async def back_to_slider(update: Update, context: ContextTypes.DEFAULT_TYPE, sub
     else:
         await show_product_slider(update, context, all_mode=False)
 
-        
+
 
 async def add_item_to_cart(context: ContextTypes.DEFAULT_TYPE, product_variant_id, chat_id, query=None):
     # --- ТҮЗЕТІЛГЕН SQL-ЗАПРОС ---
@@ -1043,26 +1043,37 @@ async def add_to_cart_handler_func(update: Update, context: ContextTypes.DEFAULT
     if not result:
         return
 
-    # 2. Қайда қайту керектігін анықтаймыз және САҚТАЙМЫЗ
+    # 2. Қайда қайту керектігін анықтаймыз және КОНТЕКСТТІ толықтай сақтаймыз
     back_callback_data = ""
     
-    product_id = context.user_data.get('current_product_id')
-    color_id = context.user_data.get('chosen_color_id')
-
-    if product_id and color_id:
-        # Егер размер таңдалған болса, артқа қайту жолы - размер таңдау беті
+    # Егер слайдерден келсек, сол контекстті толықтай сақтаймыз
+    slider_ctx = context.user_data.get('return_to_slider')
+    if slider_ctx:
+        back_callback_data = "back_to_slider"
+        # Сенің ескі кодындағы сияқты, корзинадан қайту үшін слайдердің толық күйін сақтаймыз
+        context.user_data['cart_return_source'] = "slider"
+        context.user_data['product_slider_page'] = slider_ctx.get('product_slider_page', 0)
+        context.user_data['all_mode'] = slider_ctx.get('all_mode', False)
+        context.user_data['current_subcat_id'] = slider_ctx.get('current_subcat_id')
+        context.user_data['current_brand_id'] = slider_ctx.get('current_brand_id')
+    
+    # Егер тікелей карточкадан келсек (размерсіз тауар)
+    elif 'current_product_id' in context.user_data and 'chosen_color_id' in context.user_data:
+        product_id = context.user_data['current_product_id']
+        color_id = context.user_data['chosen_color_id']
+        
+        # Егер размер таңдалған болса, артқа қайту жолы - түс таңдау беті
         if 'chosen_size_id' in context.user_data:
             back_callback_data = f"color_{product_id}_{color_id}"
-        # Егер размер таңдалмаған болса (размерсіз тауар), артқа қайту жолы - түс таңдау беті
+        # Егер размер таңдалмаған болса (размерсіз тауар), артқа қайту жолы - товардың негізгі беті
         else:
             back_callback_data = f"details_{product_id}"
-    
-    # === МІНЕ, ЕҢ БАСТЫ ТҮЗЕТУ ОСЫ ЖЕРДЕ ===
-    # Қайда қайту керектігін корзинаның өзі үшін сақтап қоямыз
-    if back_callback_data:
+        
+        # Корзинадан қайту үшін контекстті сақтаймыз
+        context.user_data['cart_return_source'] = "product_card"
         context.user_data['cart_return_path'] = back_callback_data
-    # ==========================================
-    
+
+
     # 3. Клавиатураны құрастырамыз
     kb = [[InlineKeyboardButton("🛒 Посмотреть корзину", callback_data="cart")]]
     if back_callback_data:
