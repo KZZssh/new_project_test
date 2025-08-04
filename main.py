@@ -17,7 +17,7 @@ from starlette.routing import Route
 
 # --- Сіздің импорттарыңыз ---
 from configs import BOT_TOKEN
-from admin_handlers import (
+from admin_handlers_newupdate import (
      add_product_conv , finish_media,
      report_handler, admin_decision_handler, cancel_dialog, cat_manage_handler,
     subcat_manage_handler, subcat_rename_conv, brand_manage_handler, brand_rename_conv,
@@ -28,7 +28,7 @@ from admin_handlers import (
     cancel_from_history_handler, confirm_cancel_from_history, back_to_order_history,
     pagination_handler , cleanup_handler
 )
-from client_handlers_org import (
+from client_handlers import (
     start_handler, catalog_handler, reply_cart_handler, subcategories_handler, brands_handler,
     brand_slider_handler, all_slider_handler, brand_slider_nav_handler, all_slider_nav_handler,
     details_handler, choose_color_handler, choose_size_handler, back_to_slider_handler,
